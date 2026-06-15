@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Hash, Plus, Send, Archive, Pin, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -74,7 +75,6 @@ export function ChannelsPage({ initialChannelId }: { initialChannelId?: string }
   };
 
   const remove = async (c: Channel) => {
-    if (!confirm(`Permanently delete #${c.name}? This removes all messages.`)) return;
     // Best-effort: delete messages + members first, then channel.
     await supabase.from("messages").delete().eq("channel_id", c.id);
     await supabase.from("channel_members").delete().eq("channel_id", c.id);
@@ -106,9 +106,30 @@ export function ChannelsPage({ initialChannelId }: { initialChannelId?: string }
                   <Button size="icon" variant="ghost" className="h-7 w-7" title={c.is_archived ? "Restore" : "Archive"} onClick={() => archive(c)}>
                     <Archive className="h-3.5 w-3.5" />
                   </Button>
-                  <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" title="Delete" onClick={() => remove(c)}>
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" title="Delete">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete #{c.name}?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will permanently delete the channel and all its messages. This cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          onClick={() => remove(c)}
+                        >
+                          Delete
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               )}
             </div>
