@@ -1,0 +1,346 @@
+import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+import { toast } from "sonner";
+import { SESSION_KEY } from "@/hooks/useAuth";
+import { z } from "zod";
+
+export const Route = createFileRoute("/auth")({
+  validateSearch: (s: Record<string, unknown>) => ({
+    reason: typeof s.reason === "string" ? s.reason : undefined,
+  }),
+  head: () => ({
+    meta: [{ title: "Sign in — JD Connect" }, { name: "description", content: "Sign in to JD Connect employee portal." }],
+  }),
+  component: AuthPage,
+});
+
+const loginSchema = z.object({
+  identifier: z.string().trim().min(3, "Employee ID or email is required").max(255),
+  password: z.string().min(6, "Password must be at least 6 characters").max(128),
+});
+
+const signupSchema = z.object({
+  full_name: z.string().trim().min(2).max(100),
+  email: z.string().trim().email().max(255),
+  password: z.string().min(8, "Use at least 8 characters").max(128),
+});
+
+const ALLOWED_DOMAIN = "jdfusion.in";
+type Step = "auth" | "verify-signup" | "reset-request" | "verify-recovery" | "reset-password";
+
+function AuthPage() {
+  const navigate = useNavigate();
+  const search = useSearch({ from: "/auth" });
+  const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState<Step>("auth");
+  const [pendingEmail, setPendingEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) navigate({ to: "/dashboard" });
+    });
+    if (search.reason === "session-replaced") {
+      toast.warning("You were signed out — this account was signed in elsewhere.");
+    }
+  }, [navigate, search.reason]);
+
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const rawIdentifier = String(fd.get("identifier") ?? "").trim();
+    const parsed = loginSchema.safeParse({
+      identifier: rawIdentifier,
+      password: String(fd.get("password") ?? ""),
+    });
+    if (!parsed.success) {
+      toast.error(parsed.error.issues[0]?.message ?? "Invalid input");
+      return;
+    }
+    setLoading(true);
+    try {
+      const isEmail = parsed.data.identifier.includes("@");
+      let email: string | null = null;
+      if (isEmail) {
+        email = parsed.data.identifier.toLowerCase();
+      } else {
+        const { data: emailData, error: rpcErr } = await supabase.rpc("email_for_employee_code", {
+          _code: parsed.data.identifier.toUpperCase(),
+        });
+        if (rpcErr || !emailData) {
+          toast.error("Employee ID not found or inactive");
+          return;
+        }
+        email = emailData as string;
+      }
+      const { data: signIn, error } = await supabase.auth.signInWithPassword({
+        email,
+        password: parsed.data.password,
+      });
+      if (error || !signIn.user) {
+        toast.error(error?.message ?? "Sign-in failed");
+        return;
+      }
+      // Record single active session
+      const sid = crypto.randomUUID();
+      await supabase.from("employee_sessions").update({ is_active: false }).eq("user_id", signIn.user.id);
+      await supabase.from("employee_sessions").insert({ user_id: signIn.user.id, session_token: sid, is_active: true });
+      localStorage.setItem(SESSION_KEY, sid);
+      toast.success("Signed in");
+      navigate({ to: "/dashboard" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSignup = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const parsed = signupSchema.safeParse({
+      full_name: String(fd.get("full_name") ?? ""),
+      email: String(fd.get("email") ?? ""),
+      password: String(fd.get("password") ?? ""),
+    });
+    if (!parsed.success) {
+      toast.error(parsed.error.issues[0]?.message ?? "Invalid input");
+      return;
+    }
+    setLoading(true);
+    try {
+      const email = parsed.data.email.toLowerCase();
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password: parsed.data.password,
+        options: {
+          emailRedirectTo: window.location.origin,
+          data: { full_name: parsed.data.full_name },
+        },
+      });
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      const domain = email.split("@")[1] ?? "";
+      if (domain !== ALLOWED_DOMAIN) {
+        toast.info(`Heads up: ${ALLOWED_DOMAIN} accounts are preferred. Yours will still need Super Admin approval.`);
+      }
+      setPendingEmail(email);
+      setOtp("");
+      setStep("verify-signup");
+      // If Supabase auto-confirmed (rare in this config), skip OTP
+      if (data.session) {
+        navigate({ to: "/pending-approval" });
+      } else {
+        toast.success("Check your email for a 6-digit verification code.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSendReset = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const email = String(fd.get("email") ?? "").trim().toLowerCase();
+    if (!email) return toast.error("Enter your email");
+    setLoading(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setLoading(false);
+    if (error) toast.error(error.message);
+    else {
+      toast.success("We sent a 6-digit code to your email.");
+      setPendingEmail(email);
+      setOtp("");
+      setStep("verify-recovery");
+    }
+  };
+
+  const handleVerifySignup = async () => {
+    if (otp.length !== 6) return toast.error("Enter the 6-digit code");
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.auth.verifyOtp({
+        email: pendingEmail,
+        token: otp,
+        type: "signup",
+      });
+      if (error || !data.user) {
+        toast.error(error?.message ?? "Invalid or expired code");
+        return;
+      }
+      const sid = crypto.randomUUID();
+      await supabase.from("employee_sessions").insert({ user_id: data.user.id, session_token: sid, is_active: true });
+      localStorage.setItem(SESSION_KEY, sid);
+      toast.success("Email verified");
+      navigate({ to: "/pending-approval" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyRecovery = async () => {
+    if (otp.length !== 6) return toast.error("Enter the 6-digit code");
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.verifyOtp({
+        email: pendingEmail,
+        token: otp,
+        type: "recovery",
+      });
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      setStep("reset-password");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSetNewPassword = async () => {
+    if (newPassword.length < 8) return toast.error("Use at least 8 characters");
+    setLoading(true);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    setLoading(false);
+    if (error) return toast.error(error.message);
+    toast.success("Password updated. Please sign in.");
+    await supabase.auth.signOut();
+    setStep("auth");
+    setNewPassword("");
+    setOtp("");
+    setPendingEmail("");
+  };
+
+  const handleResendCode = async (type: "signup" | "recovery") => {
+    if (!pendingEmail) return;
+    setLoading(true);
+    const { error } = type === "recovery"
+      ? await supabase.auth.resetPasswordForEmail(pendingEmail, { redirectTo: `${window.location.origin}/reset-password` })
+      : await supabase.auth.resend({ type: "signup", email: pendingEmail });
+    setLoading(false);
+    if (error) toast.error(error.message);
+    else toast.success("Code resent");
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary via-primary to-sidebar p-4">
+      <div className="w-full max-w-md flex flex-col gap-3">
+      <Card className="w-full shadow-2xl">
+        <CardHeader className="text-center">
+          <div className="mx-auto mb-2 h-12 w-12 rounded-xl bg-primary text-primary-foreground grid place-items-center text-xl font-bold">JD</div>
+          <CardTitle className="text-2xl">JD Connect</CardTitle>
+          <CardDescription>Employee Portal</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {step === "reset-request" ? (
+            <form onSubmit={handleSendReset} className="space-y-4">
+              <p className="text-sm text-muted-foreground">Enter your email and we'll send you a 6-digit code to reset your password.</p>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input id="email" name="email" type="email" required />
+              </div>
+              <Button type="submit" className="w-full" disabled={loading}>Send code</Button>
+              <Button type="button" variant="ghost" className="w-full" onClick={() => setStep("auth")}>Back to sign in</Button>
+            </form>
+          ) : step === "verify-signup" || step === "verify-recovery" ? (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground text-center">
+                Enter the 6-digit code sent to<br /><span className="font-medium text-foreground">{pendingEmail}</span>
+              </p>
+              <div className="flex justify-center">
+                <InputOTP maxLength={6} value={otp} onChange={setOtp}>
+                  <InputOTPGroup>
+                    {[0,1,2,3,4,5].map((i) => <InputOTPSlot key={i} index={i} />)}
+                  </InputOTPGroup>
+                </InputOTP>
+              </div>
+              <Button
+                className="w-full"
+                disabled={loading || otp.length !== 6}
+                onClick={step === "verify-signup" ? handleVerifySignup : handleVerifyRecovery}
+              >Verify</Button>
+              <div className="flex justify-between text-xs">
+                <button type="button" className="text-muted-foreground hover:text-primary" onClick={() => handleResendCode(step === "verify-signup" ? "signup" : "recovery")} disabled={loading}>Resend code</button>
+                <button type="button" className="text-muted-foreground hover:text-primary" onClick={() => setStep("auth")}>Cancel</button>
+              </div>
+            </div>
+          ) : step === "reset-password" ? (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">Set a new password for <span className="font-medium text-foreground">{pendingEmail}</span></p>
+              <div className="space-y-2">
+                <Label htmlFor="new_password">New password</Label>
+                <Input id="new_password" type="password" minLength={8} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+              </div>
+              <Button className="w-full" disabled={loading} onClick={handleSetNewPassword}>Update password</Button>
+            </div>
+          ) : (
+            <Tabs defaultValue="login">
+              <TabsList className="grid grid-cols-2 w-full">
+                <TabsTrigger value="login">Sign in</TabsTrigger>
+                <TabsTrigger value="signup">Create account</TabsTrigger>
+              </TabsList>
+              <TabsContent value="login">
+                <form onSubmit={handleLogin} className="space-y-4 mt-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="identifier">Employee ID or Email</Label>
+                    <Input id="identifier" name="identifier" placeholder="JD0001 or you@example.com" required autoFocus />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="password">Password</Label>
+                    <Input id="password" name="password" type="password" required />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={loading}>Sign in</Button>
+                  <button type="button" onClick={() => setStep("reset-request")} className="text-sm text-muted-foreground hover:text-primary w-full text-center">
+                    Forgot password?
+                  </button>
+                </form>
+              </TabsContent>
+              <TabsContent value="signup">
+                <form onSubmit={handleSignup} className="space-y-4 mt-4">
+                  <p className="text-xs text-muted-foreground">
+                    Use your <span className="font-medium text-foreground">@{ALLOWED_DOMAIN}</span> email. Other domains can sign up but require Super Admin approval before access.
+                  </p>
+                  <div className="space-y-2">
+                    <Label htmlFor="full_name">Full Name</Label>
+                    <Input id="full_name" name="full_name" required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="signup_email">Email</Label>
+                    <Input id="signup_email" name="email" type="email" required placeholder={`you@${ALLOWED_DOMAIN}`} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="signup_password">Password</Label>
+                    <Input id="signup_password" name="password" type="password" required minLength={8} />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={loading}>Create account</Button>
+                </form>
+              </TabsContent>
+            </Tabs>
+          )}
+        </CardContent>
+      </Card>
+      <p className="text-center text-xs text-white/80">
+        Design &amp; Develop by{" "}
+        <a
+          href="https://www.amitsrivastav.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-white font-medium hover:underline"
+        >
+          Amit Srivastav
+        </a>
+      </p>
+      </div>
+    </div>
+  );
+}
