@@ -111,7 +111,7 @@ jobs:
   publish-release:
     name: Publish Release & Generate Updater JSON
     runs-on: ubuntu-latest
-    needs: [build-windows, build-macos]  # Only runs after BOTH builds succeed
+    needs: [build-windows, build-macos]
 
     steps:
       - name: Fetch release assets and build latest.json
@@ -124,32 +124,58 @@ jobs:
           PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           BASE_URL="https://github.com/${REPO}/releases/download/${TAG}"
 
-          # Download all .sig files from the draft release
           mkdir -p ./sigs
           gh release download "$TAG" --repo "$REPO" --pattern "*.sig" --dir ./sigs
 
           echo "Downloaded .sig files:"
           ls ./sigs/
 
-          # Read signatures
-          MACOS_SIG=$(cat ./sigs/*.app.tar.gz.sig)
-          # Windows produces either a .msi.sig or .exe.sig — use whichever exists
-          WIN_SIG=$(cat ./sigs/*.msi.sig 2>/dev/null || cat ./sigs/*.exe.sig)
+          # Use find to safely handle filenames with spaces
+          MACOS_SIG_FILE=$(find ./sigs -name "*.app.tar.gz.sig" | head -1)
+          WIN_SIG_FILE=$(find ./sigs -name "*.msi.sig" | head -1)
 
-          # Get the actual filenames (strip .sig extension)
-          MACOS_FILE=$(basename ./sigs/*.app.tar.gz.sig .sig)
-          # Prefer .msi for Windows updater, fall back to .exe
-          WIN_FILE=$(basename ./sigs/*.msi.sig .sig 2>/dev/null || basename ./sigs/*.exe.sig .sig)
+          echo "macOS sig: $MACOS_SIG_FILE"
+          echo "Windows sig: $WIN_SIG_FILE"
 
-          # Write latest.json using printf to avoid heredoc indentation issues
-          printf '{\n  "version": "%s",\n  "notes": "See the release notes for this version.",\n  "pub_date": "%s",\n  "platforms": {\n    "darwin-aarch64": {\n      "signature": "%s",\n      "url": "%s/%s"\n    },\n    "windows-x86_64": {\n      "signature": "%s",\n      "url": "%s/%s"\n    }\n  }\n}\n' \
-            "$VERSION" "$PUB_DATE" \
-            "$MACOS_SIG" "$BASE_URL" "$MACOS_FILE" \
-            "$WIN_SIG" "$BASE_URL" "$WIN_FILE" \
-            > latest.json
+          MACOS_SIG=$(cat "$MACOS_SIG_FILE")
+          WIN_SIG=$(cat "$WIN_SIG_FILE")
 
+          # Query the GitHub API for the real asset names (gh download replaces spaces with dots)
+          MACOS_ASSET=$(gh release view "$TAG" --repo "$REPO" --json assets \
+            --jq '.assets[] | select(.name | endswith(".app.tar.gz")) | .name' | head -1)
+          WIN_ASSET=$(gh release view "$TAG" --repo "$REPO" --json assets \
+            --jq '.assets[] | select(.name | endswith(".msi")) | .name' | head -1)
+
+          echo "macOS asset: $MACOS_ASSET"
+          echo "Windows asset: $WIN_ASSET"
+
+          # URL-encode spaces
+          MACOS_ASSET_ENC="${MACOS_ASSET// /%20}"
+          WIN_ASSET_ENC="${WIN_ASSET// /%20}"
+
+          # Use python3 to safely build JSON (no quoting issues with special chars in sigs)
+          python3 -c "
+import json, sys
+data = {
+  'version': sys.argv[1],
+  'notes': 'See the release notes for this version.',
+  'pub_date': sys.argv[2],
+  'platforms': {
+    'darwin-aarch64': {
+      'signature': sys.argv[3],
+      'url': sys.argv[4] + '/' + sys.argv[5]
+    },
+    'windows-x86_64': {
+      'signature': sys.argv[6],
+      'url': sys.argv[4] + '/' + sys.argv[7]
+    }
+  }
+}
+print(json.dumps(data, indent=2))
+" "$VERSION" "$PUB_DATE" "$MACOS_SIG" "$BASE_URL" "$MACOS_ASSET_ENC" "$WIN_SIG" "$WIN_ASSET_ENC" > latest.json
+
+          echo "Generated latest.json:"
           cat latest.json
 
-          # Upload latest.json and publish the release
           gh release upload "$TAG" ./latest.json --repo "$REPO" --clobber
           gh release edit "$TAG" --repo "$REPO" --draft=false
