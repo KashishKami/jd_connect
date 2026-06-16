@@ -41,9 +41,25 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: "JD Connect ${{ github.ref_name }}"
           releaseBody: "See the release notes for this version."
-          releaseDraft: true      # Draft so the release isn't published mid-upload
+          releaseDraft: true
           prerelease: false
-          includeUpdaterJson: false  # Don't generate updater JSON yet — wait for all platforms
+          includeUpdaterJson: false
+
+      - name: List bundle output (debug)
+        shell: pwsh
+        run: Get-ChildItem -Path "src-tauri/target/release/bundle" -Recurse | Select-Object FullName
+
+      - name: Upload .sig files to release
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $TAG = "${{ github.ref_name }}"
+          $REPO = "${{ github.repository }}"
+          Get-ChildItem -Path "src-tauri/target/release/bundle" -Recurse -Filter "*.sig" | ForEach-Object {
+            Write-Host "Uploading $($_.FullName)"
+            gh release upload $TAG $_.FullName --repo $REPO --clobber
+          }
 
   build-macos:
     name: Build macOS (.dmg)
@@ -75,9 +91,22 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: "JD Connect ${{ github.ref_name }}"
           releaseBody: "See the release notes for this version."
-          releaseDraft: true      # Draft so the release isn't published mid-upload
+          releaseDraft: true
           prerelease: false
-          includeUpdaterJson: false  # Don't generate updater JSON yet — wait for all platforms
+          includeUpdaterJson: false
+
+      - name: List bundle output (debug)
+        run: find src-tauri/target/release/bundle -type f
+
+      - name: Upload .sig files to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG=${{ github.ref_name }}
+          find src-tauri/target/release/bundle -name "*.sig" | while read sigfile; do
+            echo "Uploading $sigfile"
+            gh release upload "$TAG" "$sigfile" --repo ${{ github.repository }} --clobber
+          done
 
   publish-release:
     name: Publish Release & Generate Updater JSON
