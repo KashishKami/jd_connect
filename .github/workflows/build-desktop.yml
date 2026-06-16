@@ -8,16 +8,9 @@ on:
 
 jobs:
 
-  build-and-release:
-    strategy:
-      matrix:
-        include:
-          - platform: windows-latest
-            target: x86_64-pc-windows-msvc
-          - platform: macos-latest
-            target: aarch64-apple-darwin
-
-    runs-on: ${{ matrix.platform }}
+  build-windows:
+    name: Build Windows (.exe)
+    runs-on: windows-latest
 
     steps:
       - name: Checkout code
@@ -26,7 +19,41 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: x86_64-pc-windows-msvc
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        with:
+          tauriScript: npx tauri
+          tagName: ${{ github.ref_name }}
+          releaseName: "JD Connect ${{ github.ref_name }}"
+          releaseBody: "See the release notes for this version."
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+
+  build-macos:
+    name: Build macOS (.dmg)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -41,8 +68,8 @@ jobs:
         with:
           tauriScript: bun tauri
           tagName: ${{ github.ref_name }}
-          releaseName: "Your App Name ${{ github.ref_name }}"
+          releaseName: "JD Connect ${{ github.ref_name }}"
           releaseBody: "See the release notes for this version."
           releaseDraft: false
           prerelease: false
-          includeUpdaterJson: true  # Auto-generates latest.json for the updater
+          includeUpdaterJson: true
