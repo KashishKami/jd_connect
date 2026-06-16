@@ -153,32 +153,23 @@ jobs:
           MACOS_ASSET_ENC="${MACOS_ASSET// /%20}"
           WIN_ASSET_ENC="${WIN_ASSET// /%20}"
 
-          # Write a python script to file to avoid YAML quoting issues
-          cat > gen_json.py << 'PYEOF'
-import json, sys
-data = {
-  "version": sys.argv[1],
-  "notes": "See the release notes for this version.",
-  "pub_date": sys.argv[2],
-  "platforms": {
-    "darwin-aarch64": {
-      "signature": sys.argv[3],
-      "url": sys.argv[4] + "/" + sys.argv[5]
-    },
-    "windows-x86_64": {
-      "signature": sys.argv[6],
-      "url": sys.argv[4] + "/" + sys.argv[7]
-    }
-  }
-}
-print(json.dumps(data, indent=2))
-PYEOF
-
-          python3 gen_json.py \
-            "$VERSION" "$PUB_DATE" \
-            "$MACOS_SIG" "$BASE_URL" "$MACOS_ASSET_ENC" \
-            "$WIN_SIG" "$WIN_ASSET_ENC" \
-            > latest.json
+          # Build latest.json using jq (pre-installed on all GitHub runners)
+          jq -n \
+            --arg version "$VERSION" \
+            --arg pub_date "$PUB_DATE" \
+            --arg macos_sig "$MACOS_SIG" \
+            --arg macos_url "$BASE_URL/$MACOS_ASSET_ENC" \
+            --arg win_sig "$WIN_SIG" \
+            --arg win_url "$BASE_URL/$WIN_ASSET_ENC" \
+            '{
+              version: $version,
+              notes: "See the release notes for this version.",
+              pub_date: $pub_date,
+              platforms: {
+                "darwin-aarch64": { signature: $macos_sig, url: $macos_url },
+                "windows-x86_64": { signature: $win_sig, url: $win_url }
+              }
+            }' > latest.json
 
           echo "Generated latest.json:"
           cat latest.json
