@@ -128,13 +128,18 @@ jobs:
           mkdir -p ./sigs
           gh release download "$TAG" --repo "$REPO" --pattern "*.sig" --dir ./sigs
 
+          echo "Downloaded .sig files:"
+          ls ./sigs/
+
           # Read signatures
           MACOS_SIG=$(cat ./sigs/*.app.tar.gz.sig)
-          WIN_SIG=$(cat ./sigs/*.msi.zip.sig 2>/dev/null || cat ./sigs/*.nsis.zip.sig)
+          # Windows produces either a .msi.sig or .exe.sig — use whichever exists
+          WIN_SIG=$(cat ./sigs/*.msi.sig 2>/dev/null || cat ./sigs/*.exe.sig)
 
           # Get the actual filenames (strip .sig extension)
           MACOS_FILE=$(basename ./sigs/*.app.tar.gz.sig .sig)
-          WIN_FILE=$(basename ./sigs/*.msi.zip.sig .sig 2>/dev/null || basename ./sigs/*.nsis.zip.sig .sig)
+          # Prefer .msi for Windows updater, fall back to .exe
+          WIN_FILE=$(basename ./sigs/*.msi.sig .sig 2>/dev/null || basename ./sigs/*.exe.sig .sig)
 
           # Write latest.json using printf to avoid heredoc indentation issues
           printf '{\n  "version": "%s",\n  "notes": "See the release notes for this version.",\n  "pub_date": "%s",\n  "platforms": {\n    "darwin-aarch64": {\n      "signature": "%s",\n      "url": "%s/%s"\n    },\n    "windows-x86_64": {\n      "signature": "%s",\n      "url": "%s/%s"\n    }\n  }\n}\n' \
