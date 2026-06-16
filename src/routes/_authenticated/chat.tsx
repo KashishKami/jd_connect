@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,10 +10,12 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Send, Search, MessageSquarePlus, Circle } from "lucide-react";
 import { toast } from "sonner";
+import { MentionInput, renderMessageBody } from "@/components/MentionInput";
+import { MessageReactions } from "@/components/MessageReactions";
 
 export const Route = createFileRoute("/_authenticated/chat")({
   head: () => ({ meta: [{ title: "Messages — JD Connect" }] }),
-  component: ChatPage,
+  component: () => <Outlet />,
 });
 
 type Conversation = {
@@ -21,8 +23,12 @@ type Conversation = {
   type: "direct" | "group";
   title: string | null;
   last_message_at: string | null;
-  participants: { employee_id: string; employees: { id: string; full_name: string; employee_code: string } | null }[];
+  participants: { employee_id: string; last_read_at: string | null; employees: { id: string; full_name: string; alias_name: string | null; employee_code: string } | null }[];
 };
+
+type PublicProfile = { id: string; full_name: string; alias_name: string | null; employee_code: string };
+type LastMsg = { body: string; sender_id: string; created_at: string };
+type MessageMeta = { lastMessages: Record<string, LastMsg>; unreadCounts: Record<string, number> };
 
 type Message = {
   id: string;
@@ -39,6 +45,7 @@ function initials(n: string) {
 export function ChatPage({ initialConversationId }: { initialConversationId?: string } = {}) {
   const { employee } = useAuth();
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [activeId, setActiveId] = useState<string | null>(initialConversationId ?? null);
   const [search, setSearch] = useState("");
   const [newChatOpen, setNewChatOpen] = useState(false);
@@ -53,12 +60,85 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
     queryFn: async () => {
       const { data, error } = await supabase
         .from("conversations")
-        .select("id, type, title, last_message_at, participants:conversation_participants(employee_id, employees(id, full_name, employee_code))")
+        .select("id, type, title, last_message_at, participants:conversation_participants(employee_id, last_read_at, employees(id, full_name, alias_name, employee_code))")
         .order("last_message_at", { ascending: false, nullsFirst: false });
       if (error) throw error;
       return (data ?? []) as unknown as Conversation[];
     },
   });
+
+  // Resolve names for participants whose employees row is hidden by RLS
+  const mineConvs = useMemo(
+    () => conversations.filter((c) => c.participants.some((p) => p.employee_id === employee?.id)),
+    [conversations, employee?.id],
+  );
+  const missingIds = useMemo(() => {
+    const s = new Set<string>();
+    mineConvs.forEach((c) =>
+      c.participants.forEach((p) => {
+        if (p.employee_id !== employee?.id && !p.employees) s.add(p.employee_id);
+      }),
+    );
+    return Array.from(s);
+  }, [mineConvs, employee?.id]);
+
+  const { data: publicProfiles = {} } = useQuery({
+    queryKey: ["chat-public-profiles", missingIds.sort().join(",")],
+    enabled: missingIds.length > 0,
+    queryFn: async () => {
+      const map: Record<string, PublicProfile> = {};
+      const results = await Promise.all(
+        missingIds.map((id) => supabase.rpc("get_employee_public_profile", { _id: id })),
+      );
+      results.forEach((r, i) => {
+        const row = Array.isArray(r.data) ? r.data[0] : r.data;
+        if (row) map[missingIds[i]] = { id: missingIds[i], full_name: row.full_name, alias_name: row.alias_name ?? null, employee_code: row.employee_code };
+      });
+      return map;
+    },
+  });
+
+  const convIds = useMemo(() => mineConvs.map((c) => c.id), [mineConvs]);
+  const { data: messageMeta = { lastMessages: {}, unreadCounts: {} } as MessageMeta } = useQuery<MessageMeta>({
+    queryKey: ["chat-message-meta", convIds.join(","), mineConvs.map((c) => c.participants.find((p) => p.employee_id === employee?.id)?.last_read_at ?? "").join(",")],
+    enabled: convIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("messages")
+        .select("conversation_id, body, sender_id, created_at, status")
+        .in("conversation_id", convIds)
+        .order("created_at", { ascending: false })
+        .limit(500);
+      if (error) throw error;
+      const map: Record<string, LastMsg> = {};
+      const unreadCounts: Record<string, number> = {};
+      const lastReadByConversation = new Map(
+        mineConvs.map((c) => [c.id, c.participants.find((p) => p.employee_id === employee?.id)?.last_read_at ?? null]),
+      );
+      (data ?? []).forEach((m) => {
+        if (m.conversation_id && !map[m.conversation_id]) {
+          map[m.conversation_id] = { body: m.body, sender_id: m.sender_id, created_at: m.created_at };
+        }
+        if (m.conversation_id && m.sender_id !== employee?.id) {
+          const lastReadAt = lastReadByConversation.get(m.conversation_id);
+          const isUnread = lastReadAt
+            ? new Date(m.created_at).getTime() > new Date(lastReadAt).getTime()
+            : m.status !== "read";
+          if (isUnread) {
+            unreadCounts[m.conversation_id] = (unreadCounts[m.conversation_id] ?? 0) + 1;
+          }
+        }
+      });
+      return { lastMessages: map, unreadCounts };
+    },
+  });
+
+  const nameFor = (id: string): string | undefined => {
+    const emp = mineConvs.flatMap((c) => c.participants).find((p) => p.employee_id === id)?.employees;
+    const fromConv = emp ? (emp.alias_name || emp.full_name) : undefined;
+    const pub = publicProfiles[id];
+    return fromConv ?? (pub ? (pub.alias_name || pub.full_name) : undefined);
+  };
 
   // Realtime: new conversation/message bumps invalidate the list
   useEffect(() => {
@@ -68,20 +148,33 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
       .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, () => {
         qc.invalidateQueries({ queryKey: ["conversations"] });
       })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, () => {
+        qc.invalidateQueries({ queryKey: ["chat-message-meta"] });
+      })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [employee?.id, qc]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
-    // Only show conversations where I'm a participant (admins can see others' via RLS — hide them here)
-    const mine = conversations.filter((c) => c.participants.some((p) => p.employee_id === employee?.id));
-    if (!q) return mine;
-    return mine.filter((c) =>
-      (c.title ?? "").toLowerCase().includes(q) ||
-      c.participants.some((p) => p.employees?.full_name.toLowerCase().includes(q) || p.employees?.employee_code.toLowerCase().includes(q))
-    );
-  }, [conversations, search, employee?.id]);
+    if (!q) return mineConvs;
+    return mineConvs.filter((c) => {
+      if ((c.title ?? "").toLowerCase().includes(q)) return true;
+      return c.participants.some((p) => {
+        const emp = p.employees;
+        const pub = publicProfiles[p.employee_id];
+        const nm = (emp?.alias_name || emp?.full_name) ?? (pub?.alias_name || pub?.full_name) ?? "";
+        const full = emp?.full_name ?? pub?.full_name ?? "";
+        const code = emp?.employee_code ?? pub?.employee_code ?? "";
+        return nm.toLowerCase().includes(q) || full.toLowerCase().includes(q) || code.toLowerCase().includes(q);
+      });
+    });
+  }, [mineConvs, search, publicProfiles]);
+
+  const openConversation = (conversationId: string) => {
+    setActiveId(conversationId);
+    void navigate({ to: "/chat/$conversationId", params: { conversationId } });
+  };
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-[320px_1fr] gap-4 h-[calc(100vh-8rem)]">
@@ -100,18 +193,39 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
           {filtered.length === 0 && <p className="p-4 text-sm text-muted-foreground">No conversations yet.</p>}
           {filtered.map((c) => {
             const others = c.participants.filter((p) => p.employee_id !== employee?.id);
-            const label = c.title ?? (others.map((p) => p.employees?.full_name).filter(Boolean).join(", ") || "Conversation");
+            const label =
+              c.title ??
+              (others.map((p) => (p.employees?.alias_name || p.employees?.full_name) ?? nameFor(p.employee_id)).filter(Boolean).join(", ") || "Conversation");
+            const last = messageMeta.lastMessages[c.id];
+            const unreadCount = messageMeta.unreadCounts[c.id] ?? 0;
+            const preview = last
+              ? `${last.sender_id === employee?.id ? "You: " : ""}${last.body}`
+              : null;
             return (
               <button
                 key={c.id}
-                onClick={() => setActiveId(c.id)}
+                onClick={() => openConversation(c.id)}
                 className={`w-full flex items-center gap-3 p-3 border-b text-left hover:bg-muted/50 ${activeId === c.id ? "bg-muted" : ""}`}
               >
                 <Avatar className="h-9 w-9"><AvatarFallback>{initials(label)}</AvatarFallback></Avatar>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{label}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {c.last_message_at ? new Date(c.last_message_at).toLocaleString() : "No messages"}
+                  <div className="flex items-baseline justify-between gap-2">
+                    <div className="text-sm font-medium truncate">{label}</div>
+                    {c.last_message_at && (
+                      <div className="text-[10px] text-muted-foreground shrink-0">
+                        {new Date(c.last_message_at).toLocaleDateString([], { day: "2-digit", month: "short" })}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className={`text-xs truncate ${unreadCount ? "font-medium text-foreground" : "text-muted-foreground"}`}>
+                      {preview ?? "No messages yet"}
+                    </div>
+                    {unreadCount > 0 && (
+                      <Badge className="h-5 min-w-5 justify-center px-1.5 text-[10px] shrink-0">
+                        {unreadCount > 99 ? "99+" : unreadCount}
+                      </Badge>
+                    )}
                   </div>
                 </div>
               </button>
@@ -128,7 +242,7 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
         )}
       </Card>
 
-      {newChatOpen && <NewChatDialog onClose={() => setNewChatOpen(false)} onCreated={(id) => { setActiveId(id); setNewChatOpen(false); qc.invalidateQueries({ queryKey: ["conversations"] }); }} />}
+      {newChatOpen && <NewChatDialog onClose={() => setNewChatOpen(false)} onCreated={(id) => { openConversation(id); setNewChatOpen(false); qc.invalidateQueries({ queryKey: ["conversations"] }); }} />}
     </div>
   );
 }
@@ -149,14 +263,18 @@ function ChatThread({ conversationId }: { conversationId: string }) {
         .order("created_at", { ascending: true })
         .limit(200);
       if (error) throw error;
-      // Mark received messages as read
-      const unread = (data ?? []).filter((m) => m.sender_id !== employee?.id && m.status !== "read").map((m) => m.id);
-      if (unread.length) {
-        await supabase.from("messages").update({ status: "read", read_at: new Date().toISOString() }).in("id", unread);
-      }
       return (data ?? []) as Message[];
     },
   });
+
+  useEffect(() => {
+    if (!employee?.id) return;
+    void supabase.rpc("mark_conversation_read", { _conversation_id: conversationId }).then(() => {
+      void qc.invalidateQueries({ queryKey: ["notifications"] });
+      void qc.invalidateQueries({ queryKey: ["conversations"] });
+      void qc.invalidateQueries({ queryKey: ["chat-message-meta"] });
+    });
+  }, [conversationId, employee?.id, messages.length, qc]);
 
   useEffect(() => {
     const ch = supabase
@@ -188,13 +306,14 @@ function ChatThread({ conversationId }: { conversationId: string }) {
         {messages.map((m) => {
           const mine = m.sender_id === employee?.id;
           return (
-            <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+            <div key={m.id} className={`group flex ${mine ? "justify-end" : "justify-start"}`}>
               <div className={`max-w-[70%] rounded-lg px-3 py-2 text-sm ${mine ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
-                <div className="whitespace-pre-wrap">{m.body}</div>
+                <div className="whitespace-pre-wrap">{renderMessageBody(m.body)}</div>
                 <div className="text-[10px] opacity-70 mt-1 flex items-center gap-1 justify-end">
                   {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                   {mine && <span>· {m.status}</span>}
                 </div>
+                <MessageReactions messageId={m.id} />
               </div>
             </div>
           );
@@ -202,7 +321,7 @@ function ChatThread({ conversationId }: { conversationId: string }) {
         {messages.length === 0 && <p className="text-center text-sm text-muted-foreground py-10">Say hello 👋</p>}
       </div>
       <div className="border-t p-3 flex gap-2">
-        <Input value={body} onChange={(e) => setBody(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder="Type a message…" maxLength={4000} />
+        <MentionInput value={body} onChange={setBody} onSubmit={send} placeholder="Type a message… use @ to mention" maxLength={4000} />
         <Button onClick={send} disabled={!body.trim()}><Send className="h-4 w-4" /></Button>
       </div>
     </>

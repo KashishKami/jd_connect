@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useRouteGuard, AccessDenied } from "@/components/PermissionGate";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -28,14 +29,7 @@ import {
   PromptInputSubmit,
 } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
-import {
-  Tool,
-  ToolHeader,
-  ToolContent,
-  ToolInput,
-  ToolOutput,
-  type ToolPart,
-} from "@/components/ai-elements/tool";
+import { Wrench } from "lucide-react";
 import {
   createConversation,
   listConversations,
@@ -56,6 +50,7 @@ const SUGGESTIONS = [
 ];
 
 function JDAIPage() {
+  const __guard = useRouteGuard("reports.ai_analytics");
   const qc = useQueryClient();
   const listFn = useServerFn(listConversations);
   const createFn = useServerFn(createConversation);
@@ -106,6 +101,8 @@ function JDAIPage() {
       if (activeId === id) setActiveId(null);
     },
   });
+
+  if (!__guard.isLoading && !__guard.allowed) return <AccessDenied perm="reports.ai_analytics" label="JD AI" />;
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)]">
@@ -323,7 +320,7 @@ type AnyPart = {
   type: string;
   text?: string;
   toolCallId?: string;
-  state?: ToolPart["state"];
+  state?: string;
   input?: unknown;
   output?: unknown;
   errorText?: string;
@@ -343,20 +340,22 @@ function MessageBlock({
   return (
     <Message from={message.role}>
       <MessageContent>
-        {/* Tool calls */}
+        {/* Tool calls — show a discreet status line only; never expose raw params/results to users */}
         {parts
           .filter((p) => p.type?.startsWith("tool-"))
-          .map((p, i) => (
-            <Tool key={(p.toolCallId ?? "") + i} defaultOpen={false} className="my-2">
-              <ToolHeader type={p.type as `tool-${string}`} state={p.state ?? "output-available"} />
-              <ToolContent>
-                {p.input !== undefined && <ToolInput input={p.input} />}
-                {(p.output !== undefined || p.errorText) && (
-                  <ToolOutput output={renderToolOutput(p)} errorText={p.errorText} />
-                )}
-              </ToolContent>
-            </Tool>
-          ))}
+          .map((p, i) => {
+            const name = (p.type ?? "").replace(/^tool-/, "").replace(/_/g, " ");
+            const running = p.state === "input-streaming" || p.state === "input-available";
+            return (
+              <div
+                key={(p.toolCallId ?? "") + i}
+                className="my-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground"
+              >
+                <Wrench className="h-3 w-3" />
+                <span>{running ? `Looking up ${name}…` : `Used ${name}`}</span>
+              </div>
+            );
+          })}
 
         {text && message.role === "assistant" ? (
           <MessageResponse>{text}</MessageResponse>
@@ -420,13 +419,4 @@ function collectSources(parts: AnyPart[]): Array<{ document_id: string; title: s
     }
   }
   return out;
-}
-
-function renderToolOutput(p: AnyPart) {
-  if (p.output === undefined) return null;
-  return (
-    <pre className="text-xs overflow-auto max-h-64 bg-muted/50 p-2 rounded">
-      {JSON.stringify(p.output, null, 2)}
-    </pre>
-  );
 }

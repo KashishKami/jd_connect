@@ -7,6 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { PresenceDot } from "@/components/PresenceDot";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useAuth } from "@/hooks/useAuth";
 
 export const Route = createFileRoute("/_authenticated/directory")({
   head: () => ({ meta: [{ title: "Employee Directory — JD Connect" }] }),
@@ -14,6 +17,9 @@ export const Route = createFileRoute("/_authenticated/directory")({
 });
 
 function Directory() {
+  const { isAdmin } = useAuth();
+  const { can, isLoading: permsLoading } = usePermissions();
+  const allowed = isAdmin || can("employees.view");
   const [q, setQ] = useState("");
   const [dept, setDept] = useState<string>("all");
   const [centre, setCentre] = useState<string>("all");
@@ -34,6 +40,7 @@ function Directory() {
 
   const { data: rows } = useQuery({
     queryKey: ["directory", q, dept, centre, role, status],
+    enabled: allowed,
     queryFn: async () => {
       const { data, error } = await supabase.rpc("search_employee_directory", {
         _q: q.trim() || undefined,
@@ -51,6 +58,15 @@ function Directory() {
   const statusColor = useMemo(() => ({
     active: "default", suspended: "secondary", resigned: "outline", terminated: "destructive",
   } as const), []);
+
+  if (!permsLoading && !allowed) {
+    return (
+      <div className="max-w-2xl mx-auto py-12 text-center space-y-2">
+        <h1 className="text-2xl font-semibold tracking-tight">Access denied</h1>
+        <p className="text-sm text-muted-foreground">You don't have permission to view the employee directory. Ask an admin to grant you the <code>employees.view</code> permission.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto">
@@ -117,7 +133,10 @@ function Directory() {
                     <Link to="/employees/$id" params={{ id: e.id }} className="text-primary hover:underline">{e.employee_code}</Link>
                   </TableCell>
                   <TableCell className="font-medium">
-                    <Link to="/employees/$id" params={{ id: e.id }} className="hover:underline">{e.full_name}</Link>
+                    <Link to="/employees/$id" params={{ id: e.id }} className="hover:underline inline-flex items-center gap-2">
+                      <PresenceDot employeeId={e.id} size="sm" />
+                      <span>{e.full_name}</span>
+                    </Link>
                   </TableCell>
                   <TableCell>{e.designation ?? "—"}</TableCell>
                   <TableCell>{e.department_name ?? "—"}</TableCell>

@@ -44,7 +44,7 @@ function AdminBreaks() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("break_records")
-        .select("*, employee:employees(full_name, employee_code), break_type:break_types(name)")
+        .select("*, employee:employees(full_name, alias_name, employee_code), break_type:break_types(name)")
         .eq("status", "exceeded")
         .order("start_at", { ascending: false })
         .limit(100);
@@ -214,7 +214,7 @@ function AdminBreaks() {
               <TableBody>
                 {violations.map((b: any) => (
                   <TableRow key={b.id}>
-                    <TableCell>{b.employee?.full_name} <span className="text-xs text-muted-foreground">{b.employee?.employee_code}</span></TableCell>
+                    <TableCell>{(b.employee as { full_name?: string; alias_name?: string | null })?.alias_name || b.employee?.full_name} <span className="text-xs text-muted-foreground">{b.employee?.employee_code}</span></TableCell>
                     <TableCell>{b.break_type?.name}</TableCell>
                     <TableCell>{new Date(b.start_at).toLocaleString()}</TableCell>
                     <TableCell>{b.duration_minutes} min</TableCell>

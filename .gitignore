@@ -30,8 +30,3 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-
-
-DESKTOP_APP_GUIDE.md
-AUTO_UPDATE_GUIDE.md
-.tauri-signing-key

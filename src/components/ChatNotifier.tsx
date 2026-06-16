@@ -7,7 +7,6 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Hash, MessageSquare, X } from "lucide-react";
-import { toast } from "sonner";
 
 type Incoming = {
   kind: "direct" | "channel";
@@ -113,10 +112,16 @@ export function ChatNotifier() {
 
           const { data: sender } = await supabase
             .from("employees")
-            .select("full_name")
+            .select("full_name, alias_name")
             .eq("id", m.sender_id)
             .maybeSingle();
-          const senderName = sender?.full_name ?? "Someone";
+          let senderName = (sender?.alias_name || sender?.full_name) ?? null;
+          if (!senderName) {
+            const { data: pub } = await supabase.rpc("get_employee_public_profile", { _id: m.sender_id });
+            const row = Array.isArray(pub) ? pub[0] : pub;
+            const r = row as { full_name?: string; alias_name?: string | null } | null;
+            senderName = (r?.alias_name || r?.full_name) ?? "Someone";
+          }
           const channelName = !isDirect ? (channelNames.current.get(targetId) ?? "channel") : null;
 
           const incoming: Incoming = {
@@ -130,18 +135,12 @@ export function ChatNotifier() {
             at: m.created_at,
           };
 
-          // Toast (top-right) — actionable
-          toast(`${incoming.title}: ${m.body.slice(0, 80)}`, {
-            action: {
-              label: "Open",
-              onClick: () => {
-                if (incoming.kind === "direct") navigate({ to: "/chat/$conversationId", params: { conversationId: incoming.targetId } });
-                else navigate({ to: "/channels/$channelId", params: { channelId: incoming.targetId } });
-              },
-            },
-          });
-
-          if (incoming.kind === "direct") void qc.invalidateQueries({ queryKey: ["messages", incoming.targetId] });
+          void qc.invalidateQueries({ queryKey: ["notifications"] });
+          if (incoming.kind === "direct") {
+            void qc.invalidateQueries({ queryKey: ["messages", incoming.targetId] });
+            void qc.invalidateQueries({ queryKey: ["conversations"] });
+            void qc.invalidateQueries({ queryKey: ["chat-message-meta"] });
+          }
           else {
             void qc.invalidateQueries({ queryKey: ["ch-messages", incoming.targetId] });
             void qc.invalidateQueries({ queryKey: ["channels"] });
@@ -152,11 +151,14 @@ export function ChatNotifier() {
             const without = prev.filter((p) => p.kind !== incoming.kind || p.targetId !== incoming.targetId);
             return [incoming, ...without].slice(0, 3);
           });
+          window.setTimeout(() => {
+            setPopups((prev) => prev.filter((p) => p.messageId !== incoming.messageId));
+          }, 5000);
         },
       )
       .subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [employee?.id, pathname, navigate]);
+  }, [employee?.id, pathname, navigate, qc]);
 
   if (popups.length === 0) return null;
 

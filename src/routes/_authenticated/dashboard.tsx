@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { LogIn, LogOut, Coffee, Square } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { fmtUSD } from "@/lib/csv";
 import { KpiTile } from "@/components/KpiTile";
 import { AgentRankings } from "@/components/AgentRankings";
@@ -25,8 +26,9 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 
 function Dashboard() {
   const { employee, roles, isAdmin, hasRole } = useAuth();
+  const { can } = usePermissions();
   const qc = useQueryClient();
-  const isManager = isAdmin || hasRole("manager");
+  const isManager = isAdmin || hasRole("manager") || can("reports.dashboards");
   const today = new Date().toISOString().slice(0, 10);
   const [from, setFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 29); return d.toISOString().slice(0, 10); });
   const [to, setTo] = useState(today);
@@ -36,7 +38,7 @@ function Dashboard() {
   // Today + MTD company sales for the reorganized header (manager+ only)
   const { data: todayKpi } = useQuery({
     queryKey: ["dash-company-today", today],
-    enabled: isAdmin || hasRole("manager"),
+    enabled: isManager,
     refetchInterval: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase.rpc("company_dashboard", { _from: today, _to: today });
@@ -49,7 +51,7 @@ function Dashboard() {
   });
   const { data: monthKpi } = useQuery({
     queryKey: ["dash-company-month", monthStart, today],
-    enabled: isAdmin || hasRole("manager"),
+    enabled: isManager,
     refetchInterval: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase.rpc("company_dashboard", { _from: monthStart, _to: today });
@@ -184,7 +186,7 @@ function Dashboard() {
     enabled: isAdmin,
     queryFn: async () => {
       const [emp, dept, ctr, sh] = await Promise.all([
-        supabase.from("employees").select("*", { count: "exact", head: true }).eq("employment_status", "active"),
+        supabase.from("employees").select("id", { count: "exact", head: true }).eq("employment_status", "active"),
         supabase.from("departments").select("*", { count: "exact", head: true }).eq("is_active", true),
         supabase.from("centres").select("*", { count: "exact", head: true }).eq("is_active", true),
         supabase.from("shifts").select("*", { count: "exact", head: true }).eq("is_active", true),
@@ -200,7 +202,7 @@ function Dashboard() {
     <div className="space-y-4 sm:space-y-6 max-w-7xl mx-auto">
       <div className="grid grid-cols-[minmax(0,1fr)_auto] sm:flex sm:items-center sm:justify-between gap-3 sm:flex-wrap">
         <div className="min-w-0">
-          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight truncate">Welcome back, {employee?.full_name?.split(" ")[0] ?? "—"}</h1>
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight truncate">Welcome back, {(employee?.alias_name || employee?.full_name || "—").split(" ")[0]}</h1>
           <p className="text-xs sm:text-sm text-muted-foreground truncate">
             {employee?.employee_code} · {roles[0]?.replace("_", " ") ?? ""}
           </p>

@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useRouteGuard, AccessDenied } from "@/components/PermissionGate";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,20 +36,20 @@ const dateShift = (days: number) => { const d = new Date(); d.setDate(d.getDate(
 type AttRow = {
   id: string; employee_id: string; work_date: string; login_at: string | null; logout_at: string | null;
   hours_worked: number | null; status: string; source: string;
-  employees: { full_name: string; employee_code: string } | null;
+  employees: { full_name: string; alias_name: string | null; employee_code: string } | null;
 };
 
 type CorrRow = {
   id: string; employee_id: string; work_date: string; reason: string; status: string;
   requested_login_at: string | null; requested_logout_at: string | null; requested_status: string | null;
   review_notes: string | null;
-  employees: { full_name: string; employee_code: string } | null;
+  employees: { full_name: string; alias_name: string | null; employee_code: string } | null;
 };
 
 type LeaveRow = {
   id: string; employee_id: string; leave_type: string; start_date: string; end_date: string;
   reason: string; status: string; review_notes: string | null;
-  employees: { full_name: string; employee_code: string } | null;
+  employees: { full_name: string; alias_name: string | null; employee_code: string } | null;
 };
 
 function statusBadge(s: string) {
@@ -64,7 +66,9 @@ function effectiveStatus(r: { status: string; login_at: string | null; logout_at
 }
 
 function TeamAttendance() {
+  const __guard = useRouteGuard("attendance.view_team");
   const { employee, hasRole, isAdmin } = useAuth();
+  const { can } = usePermissions();
   const qc = useQueryClient();
   const sp = Route.useSearch();
   const [from, setFrom] = useState(sp.from || dateShift(-7));
@@ -72,14 +76,16 @@ function TeamAttendance() {
   const view = sp.view ?? "all";
   useEffect(() => { if (sp.from) setFrom(sp.from); if (sp.to) setTo(sp.to); }, [sp.from, sp.to]);
 
-  const canReview = isAdmin || hasRole("manager");
-  const canRequestCorrection = isAdmin || hasRole("manager") || hasRole("team_leader");
+  // canReview: approve/reject correction requests and leave requests
+  const canReview = isAdmin || hasRole("manager") || can("attendance.correction_approve");
+  // canRequestCorrection: submit a correction on behalf of a team member
+  const canRequestCorrection = isAdmin || hasRole("manager") || hasRole("team_leader") || can("attendance.correction_request");
 
   const { data: team } = useQuery({
     enabled: !!employee?.id,
     queryKey: ["my-team", employee?.id],
     queryFn: async () => {
-      const q = supabase.from("employees").select("id, full_name, employee_code").order("full_name");
+      const q = supabase.from("employees").select("id, full_name, alias_name, employee_code").order("full_name");
       if (isAdmin) return ((await q).data ?? []);
       const { data } = await q.or(`manager_id.eq.${employee!.id},team_leader_id.eq.${employee!.id}`);
       return data ?? [];
@@ -94,7 +100,7 @@ function TeamAttendance() {
     queryFn: async () => {
       const { data } = await supabase
         .from("attendance_records")
-        .select("*, employees(full_name, employee_code)")
+        .select("*, employees(full_name, alias_name, employee_code)")
         .in("employee_id", teamIds)
         .gte("work_date", from)
         .lte("work_date", to)
@@ -109,7 +115,7 @@ function TeamAttendance() {
     queryFn: async () => {
       const { data } = await supabase
         .from("attendance_corrections")
-        .select("*, employees:employees!attendance_corrections_employee_id_fkey(full_name, employee_code)")
+        .select("*, employees:employees!attendance_corrections_employee_id_fkey(full_name, alias_name, employee_code)")
         .order("created_at", { ascending: false })
         .limit(100);
       return (data ?? []) as unknown as CorrRow[];
@@ -122,12 +128,14 @@ function TeamAttendance() {
     queryFn: async () => {
       const { data } = await supabase
         .from("leave_requests")
-        .select("*, employees(full_name, employee_code)")
+        .select("*, employees(full_name, alias_name, employee_code)")
         .order("created_at", { ascending: false })
         .limit(100);
       return (data ?? []) as unknown as LeaveRow[];
     },
   });
+
+  if (!__guard.isLoading && !__guard.allowed) return <AccessDenied perm="attendance.view_team" label="team attendance" />;
 
   return (
     <div className="max-w-7xl mx-auto space-y-4">
@@ -167,7 +175,7 @@ function TeamAttendance() {
               {(rows ?? []).map((r) => (
                 <TableRow key={r.id}>
                   <TableCell className="font-mono text-xs">{r.work_date}</TableCell>
-                  <TableCell>{r.employees?.full_name} <span className="text-xs text-muted-foreground font-mono">({r.employees?.employee_code})</span></TableCell>
+                  <TableCell>{(r.employees?.alias_name || r.employees?.full_name)} <span className="text-xs text-muted-foreground font-mono">({r.employees?.employee_code})</span></TableCell>
                   <TableCell className="font-mono text-xs">{r.login_at ? new Date(r.login_at).toLocaleTimeString() : "—"}</TableCell>
                   <TableCell className="font-mono text-xs">{r.logout_at ? new Date(r.logout_at).toLocaleTimeString() : "—"}</TableCell>
                   <TableCell className="font-mono text-xs">{r.hours_worked ?? "—"}</TableCell>
@@ -197,7 +205,7 @@ function TeamAttendance() {
               {(corrections ?? []).map((c) => (
                 <TableRow key={c.id}>
                   <TableCell className="font-mono text-xs">{c.work_date}</TableCell>
-                  <TableCell>{c.employees?.full_name}</TableCell>
+                  <TableCell>{c.employees?.alias_name || c.employees?.full_name}</TableCell>
                   <TableCell className="font-mono text-xs">{c.requested_login_at ? new Date(c.requested_login_at).toLocaleString() : "—"}</TableCell>
                   <TableCell className="font-mono text-xs">{c.requested_logout_at ? new Date(c.requested_logout_at).toLocaleString() : "—"}</TableCell>
                   <TableCell className="max-w-[240px] truncate" title={c.reason}>{c.reason}</TableCell>
@@ -226,7 +234,7 @@ function TeamAttendance() {
             <TableBody>
               {(leaves ?? []).map((l) => (
                 <TableRow key={l.id}>
-                  <TableCell>{l.employees?.full_name}</TableCell>
+                  <TableCell>{l.employees?.alias_name || l.employees?.full_name}</TableCell>
                   <TableCell className="capitalize">{l.leave_type.replace("_", " ")}</TableCell>
                   <TableCell className="font-mono text-xs">{l.start_date}</TableCell>
                   <TableCell className="font-mono text-xs">{l.end_date}</TableCell>
@@ -282,7 +290,7 @@ function CorrectionDialog({ record, onChange }: { record: AttRow; onChange: () =
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild><Button size="sm" variant="outline">Request correction</Button></DialogTrigger>
       <DialogContent>
-        <DialogHeader><DialogTitle>Correction for {record.employees?.full_name} — {record.work_date}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>Correction for {record.employees?.alias_name || record.employees?.full_name} — {record.work_date}</DialogTitle></DialogHeader>
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div><Label>Login</Label><Input type="datetime-local" value={form.requested_login_at} onChange={(e) => setForm({ ...form, requested_login_at: e.target.value })} /></div>

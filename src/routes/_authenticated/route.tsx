@@ -35,7 +35,7 @@ function AuthedLayout() {
           <header className="h-14 flex items-center gap-3 border-b bg-background px-4 sticky top-0 z-10">
             <SidebarTrigger />
             <div className="h-6 w-px bg-border" />
-            <h1 className="text-sm font-medium text-foreground">JD Connect</h1>
+            <div className="text-sm font-medium text-foreground">JD Connect</div>
             <div className="ml-auto">
               <HeaderActions />
             </div>

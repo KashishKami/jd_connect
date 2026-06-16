@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useRouteGuard, AccessDenied } from "@/components/PermissionGate";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -30,9 +32,12 @@ function statusBadge(s: string) {
 }
 
 function TeamBreaks() {
+  const __guard = useRouteGuard("breaks.view_team");
   const { employee, isAdmin, hasRole } = useAuth();
+  const { can } = usePermissions();
   const qc = useQueryClient();
-  const canManagePolicies = isAdmin || hasRole("manager");
+  // canManagePolicies: approve/reject break requests and manage break policy config
+  const canManagePolicies = isAdmin || hasRole("manager") || can("breaks.policies_manage");
 
   // Discover team employee ids visible to me (via RLS-allowed query)
   const { data: teamIds = [] } = useQuery({
@@ -55,7 +60,7 @@ function TeamBreaks() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("break_records")
-        .select("*, employee:employees(id, full_name, employee_code), break_type:break_types(name)")
+        .select("*, employee:employees(id, full_name, alias_name, employee_code), break_type:break_types(name)")
         .in("employee_id", teamIds)
         .eq("status", "active")
         .order("start_at", { ascending: false });
@@ -71,7 +76,7 @@ function TeamBreaks() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("break_records")
-        .select("*, employee:employees(id, full_name, employee_code), break_type:break_types(name)")
+        .select("*, employee:employees(id, full_name, alias_name, employee_code), break_type:break_types(name)")
         .in("employee_id", teamIds)
         .order("start_at", { ascending: false })
         .limit(200);
@@ -86,7 +91,7 @@ function TeamBreaks() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("break_requests")
-        .select("*, employee:employees(id, full_name, employee_code), break_type:break_types(name)")
+        .select("*, employee:employees(id, full_name, alias_name, employee_code), break_type:break_types(name)")
         .in("employee_id", teamIds)
         .order("created_at", { ascending: false })
         .limit(50);
@@ -115,6 +120,8 @@ function TeamBreaks() {
   const [reviewing, setReviewing] = useState<any>(null);
   const [reviewNotes, setReviewNotes] = useState("");
 
+  if (!__guard.isLoading && !__guard.allowed) return <AccessDenied perm="breaks.view_team" label="team breaks" />;
+
   return (
     <div className="space-y-6 p-4 md:p-6">
       <h1 className="text-2xl font-semibold">Team Breaks</h1>
@@ -140,7 +147,7 @@ function TeamBreaks() {
                   const over = b.limit_minutes && el > b.limit_minutes;
                   return (
                     <TableRow key={b.id}>
-                      <TableCell>{b.employee?.full_name} <span className="text-muted-foreground text-xs">{b.employee?.employee_code}</span></TableCell>
+                      <TableCell>{b.employee?.alias_name || b.employee?.full_name} <span className="text-muted-foreground text-xs">{b.employee?.employee_code}</span></TableCell>
                       <TableCell>{b.break_type?.name}</TableCell>
                       <TableCell>{new Date(b.start_at).toLocaleTimeString()}</TableCell>
                       <TableCell>{el} min</TableCell>
@@ -165,7 +172,7 @@ function TeamBreaks() {
               <TableBody>
                 {exceeded.map((b: any) => (
                   <TableRow key={b.id}>
-                    <TableCell>{b.employee?.full_name}</TableCell>
+                    <TableCell>{b.employee?.alias_name || b.employee?.full_name}</TableCell>
                     <TableCell>{b.break_type?.name}</TableCell>
                     <TableCell>{new Date(b.start_at).toLocaleString()}</TableCell>
                     <TableCell>{b.duration_minutes} min</TableCell>
@@ -188,7 +195,7 @@ function TeamBreaks() {
               <TableBody>
                 {history.map((b: any) => (
                   <TableRow key={b.id}>
-                    <TableCell>{b.employee?.full_name}</TableCell>
+                    <TableCell>{b.employee?.alias_name || b.employee?.full_name}</TableCell>
                     <TableCell>{b.break_type?.name}</TableCell>
                     <TableCell>{new Date(b.start_at).toLocaleString()}</TableCell>
                     <TableCell>{b.duration_minutes ?? "—"}</TableCell>
@@ -211,7 +218,7 @@ function TeamBreaks() {
               <TableBody>
                 {requests.map((r: any) => (
                   <TableRow key={r.id}>
-                    <TableCell>{r.employee?.full_name}</TableCell>
+                    <TableCell>{r.employee?.alias_name || r.employee?.full_name}</TableCell>
                     <TableCell>{r.break_type?.name ?? "—"}</TableCell>
                     <TableCell>{r.requested_minutes}</TableCell>
                     <TableCell className="max-w-xs truncate">{r.reason}</TableCell>
@@ -225,7 +232,7 @@ function TeamBreaks() {
                           <DialogContent>
                             <DialogHeader><DialogTitle>Review Request</DialogTitle></DialogHeader>
                             <div className="space-y-2">
-                              <div className="text-sm"><b>{reviewing?.employee?.full_name}</b> — {reviewing?.requested_minutes} min</div>
+                              <div className="text-sm"><b>{reviewing?.employee?.alias_name || reviewing?.employee?.full_name}</b> — {reviewing?.requested_minutes} min</div>
                               <div className="text-sm text-muted-foreground">{reviewing?.reason}</div>
                               <Label>Notes</Label>
                               <Textarea value={reviewNotes} onChange={(e) => setReviewNotes(e.target.value)} />

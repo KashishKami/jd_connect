@@ -1,4 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useRouteGuard, AccessDenied } from "@/components/PermissionGate";
+import { usePermissions } from "@/hooks/usePermissions";
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -30,12 +32,16 @@ export const Route = createFileRoute("/_authenticated/sales/team")({
 const today = () => new Date().toISOString().slice(0, 10);
 
 function TeamSales() {
+  const __guard = useRouteGuard("sales.view_team");
   const { employee, roles, isAdmin } = useAuth();
+  const { can } = usePermissions();
   const qc = useQueryClient();
   const search = Route.useSearch();
   const kind = search.kind;
-  const canEnter = isAdmin || roles.includes("manager") || roles.includes("team_leader");
-  const isManager = isAdmin || roles.includes("manager");
+  // canEnter: built-in manager/team_leader roles OR the granular sales.enter_team permission
+  const canEnter = isAdmin || roles.includes("manager") || roles.includes("team_leader") || can("sales.enter_team");
+  // isManager: controls whether the user sees the full company leaderboard (true) or just their team (false)
+  const isManager = isAdmin || roles.includes("manager") || can("sales.view_all");
   const [from, setFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 29); return d.toISOString().slice(0, 10); });
   const [to, setTo] = useState(today());
 
@@ -73,11 +79,11 @@ function TeamSales() {
       if (isManager) {
         const { data, error } = await supabase
           .from("employees")
-          .select("id, full_name, employee_code")
+          .select("id, full_name, alias_name, employee_code")
           .eq("employment_status", "active")
           .order("full_name");
         if (error) throw error;
-        return (data ?? []).map((e) => ({ employee_id: e.id, full_name: e.full_name, employee_code: e.employee_code }));
+        return (data ?? []).map((e) => ({ employee_id: e.id, full_name: e.alias_name || e.full_name, employee_code: e.employee_code }));
       }
       return team.map((t) => ({ employee_id: t.employee_id, full_name: t.full_name, employee_code: t.employee_code }));
     },
@@ -102,6 +108,8 @@ function TeamSales() {
   }), { cnt: 0, gross: 0, ref: 0, cb: 0, net: 0 });
 
   const kindLabel = kind === "refund" ? "Refunds" : kind === "chargeback" ? "Chargebacks" : kind === "sales" ? "Sales" : null;
+
+  if (!__guard.isLoading && !__guard.allowed) return <AccessDenied perm="sales.view_team" label="team sales" />;
 
   return (
     <div className="max-w-6xl mx-auto space-y-4">

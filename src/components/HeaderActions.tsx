@@ -17,6 +17,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+type NotificationItem = { id: string; type: string; title: string; body: string | null; link: string | null; is_read: boolean; created_at: string };
+
 export function HeaderActions() {
   const { employee, roles, signOut } = useAuth();
   const qc = useQueryClient();
@@ -30,9 +32,10 @@ export function HeaderActions() {
       const { data } = await supabase
         .from("notifications")
         .select("id, type, title, body, link, is_read, created_at")
+        .eq("employee_id", employee!.id)
         .order("created_at", { ascending: false })
         .limit(30);
-      return (data ?? []) as { id: string; type: string; title: string; body: string | null; link: string | null; is_read: boolean; created_at: string }[];
+      return (data ?? []) as NotificationItem[];
     },
   });
 
@@ -42,7 +45,7 @@ export function HeaderActions() {
     if (!employee?.id) return;
     const ch = supabase
       .channel("notif-header-" + employee.id)
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: `employee_id=eq.${employee.id}` }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "notifications", filter: `employee_id=eq.${employee.id}` }, () => {
         qc.invalidateQueries({ queryKey: ["notifications"] });
       })
       .subscribe();
@@ -54,8 +57,18 @@ export function HeaderActions() {
     await supabase.from("notifications").update({ is_read: true }).eq("employee_id", employee.id).eq("is_read", false);
     qc.invalidateQueries({ queryKey: ["notifications"] });
   };
-  const markOneRead = async (id: string) => {
-    await supabase.from("notifications").update({ is_read: true }).eq("id", id);
+  const markOneRead = async (n: NotificationItem) => {
+    if (n.link?.startsWith("/chat/")) {
+      await supabase.rpc("mark_conversation_read", { _conversation_id: n.link.replace("/chat/", "") });
+      void qc.invalidateQueries({ queryKey: ["conversations"] });
+      void qc.invalidateQueries({ queryKey: ["chat-message-meta"] });
+    } else if (n.link?.startsWith("/channels/")) {
+      await supabase.rpc("mark_channel_read", { _channel_id: n.link.replace("/channels/", "") });
+      void qc.invalidateQueries({ queryKey: ["channels"] });
+      void qc.invalidateQueries({ queryKey: ["channel-unread-counts"] });
+    } else {
+      await supabase.from("notifications").update({ is_read: true }).eq("id", n.id);
+    }
     qc.invalidateQueries({ queryKey: ["notifications"] });
   };
   const openNotification = (link: string | null) => {
@@ -73,7 +86,7 @@ export function HeaderActions() {
     }
   };
 
-  const initials = (employee?.full_name ?? "?")
+  const initials = (employee?.alias_name || employee?.full_name || "?")
     .split(" ")
     .map((s) => s[0])
     .slice(0, 2)
@@ -102,7 +115,7 @@ export function HeaderActions() {
               </Button>
             )}
           </div>
-          <ScrollArea className="max-h-[380px]">
+          <ScrollArea className="h-[min(380px,calc(100vh-10rem))]">
             {items.length === 0 ? (
               <div className="p-6 text-center text-xs text-muted-foreground">You're all caught up.</div>
             ) : (
@@ -119,7 +132,7 @@ export function HeaderActions() {
                     </div>
                   );
                   return (
-                    <li key={n.id} onClick={() => { if (!n.is_read) void markOneRead(n.id); openNotification(n.link); }} className="cursor-pointer">
+                    <li key={n.id} onClick={() => { void markOneRead(n); openNotification(n.link); }} className="cursor-pointer">
                       {content}
                     </li>
                   );
@@ -137,7 +150,7 @@ export function HeaderActions() {
               {initials}
             </span>
             <span className="hidden sm:inline text-xs font-medium truncate max-w-[120px]">
-              {employee?.full_name ?? "—"}
+              {employee?.alias_name || employee?.full_name || "—"}
             </span>
             <ChevronDown className="h-3 w-3 opacity-60" />
           </Button>
@@ -145,7 +158,7 @@ export function HeaderActions() {
         <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuLabel className="font-normal">
             <div className="flex flex-col leading-tight">
-              <span className="text-sm font-medium truncate">{employee?.full_name ?? "—"}</span>
+              <span className="text-sm font-medium truncate">{employee?.alias_name || employee?.full_name || "—"}</span>
               <span className="text-[11px] text-muted-foreground truncate">
                 {employee?.employee_code} · {roles[0]?.replace("_", " ") ?? "—"}
               </span>

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/PasswordInput";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -10,13 +11,19 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp
 import { toast } from "sonner";
 import { SESSION_KEY } from "@/hooks/useAuth";
 import { z } from "zod";
+import { Apple, Monitor, Download } from "lucide-react";
 
 export const Route = createFileRoute("/auth")({
   validateSearch: (s: Record<string, unknown>) => ({
     reason: typeof s.reason === "string" ? s.reason : undefined,
   }),
   head: () => ({
-    meta: [{ title: "Sign in — JD Connect" }, { name: "description", content: "Sign in to JD Connect employee portal." }],
+    meta: [
+      { title: "Sign in — JD Connect" },
+      { name: "description", content: "Sign in to the JD Connect employee portal to manage your profile, attendance, sales and team communication." },
+      { property: "og:title", content: "Sign in — JD Connect" },
+      { property: "og:description", content: "Sign in to the JD Connect employee portal to manage your profile, attendance, sales and team communication." },
+    ],
   }),
   component: AuthPage,
 });
@@ -27,7 +34,8 @@ const loginSchema = z.object({
 });
 
 const signupSchema = z.object({
-  full_name: z.string().trim().min(2).max(100),
+  full_name: z.string().trim().min(2, "Enter your real full name").max(100),
+  alias_name: z.string().trim().min(2, "Enter your alias / display name").max(100),
   email: z.string().trim().email().max(255),
   password: z.string().min(8, "Use at least 8 characters").max(128),
 });
@@ -106,11 +114,16 @@ function AuthPage() {
     const fd = new FormData(e.currentTarget);
     const parsed = signupSchema.safeParse({
       full_name: String(fd.get("full_name") ?? ""),
+      alias_name: String(fd.get("alias_name") ?? ""),
       email: String(fd.get("email") ?? ""),
       password: String(fd.get("password") ?? ""),
     });
     if (!parsed.success) {
       toast.error(parsed.error.issues[0]?.message ?? "Invalid input");
+      return;
+    }
+    if (parsed.data.full_name.trim().toLowerCase() === parsed.data.alias_name.trim().toLowerCase()) {
+      toast.error("Alias name should be different from your real name");
       return;
     }
     setLoading(true);
@@ -121,7 +134,7 @@ function AuthPage() {
         password: parsed.data.password,
         options: {
           emailRedirectTo: window.location.origin,
-          data: { full_name: parsed.data.full_name },
+          data: { full_name: parsed.data.full_name, alias_name: parsed.data.alias_name },
         },
       });
       if (error) {
@@ -279,7 +292,7 @@ function AuthPage() {
               <p className="text-sm text-muted-foreground">Set a new password for <span className="font-medium text-foreground">{pendingEmail}</span></p>
               <div className="space-y-2">
                 <Label htmlFor="new_password">New password</Label>
-                <Input id="new_password" type="password" minLength={8} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+                <PasswordInput id="new_password" minLength={8} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
               </div>
               <Button className="w-full" disabled={loading} onClick={handleSetNewPassword}>Update password</Button>
             </div>
@@ -297,7 +310,7 @@ function AuthPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="password">Password</Label>
-                    <Input id="password" name="password" type="password" required />
+                    <PasswordInput id="password" name="password" required />
                   </div>
                   <Button type="submit" className="w-full" disabled={loading}>Sign in</Button>
                   <button type="button" onClick={() => setStep("reset-request")} className="text-sm text-muted-foreground hover:text-primary w-full text-center">
@@ -311,8 +324,14 @@ function AuthPage() {
                     Use your <span className="font-medium text-foreground">@{ALLOWED_DOMAIN}</span> email. Other domains can sign up but require Super Admin approval before access.
                   </p>
                   <div className="space-y-2">
-                    <Label htmlFor="full_name">Full Name</Label>
-                    <Input id="full_name" name="full_name" required />
+                    <Label htmlFor="full_name">Real Full Name</Label>
+                    <Input id="full_name" name="full_name" required placeholder="As on your ID / official records" />
+                    <p className="text-xs text-muted-foreground">Your legal name — used for HR and payroll.</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="alias_name">Alias Name</Label>
+                    <Input id="alias_name" name="alias_name" required placeholder="The name you use on calls / with customers" />
+                    <p className="text-xs text-muted-foreground">Shown to teammates and customers. Must be different from your real name.</p>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="signup_email">Email</Label>
@@ -320,7 +339,7 @@ function AuthPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="signup_password">Password</Label>
-                    <Input id="signup_password" name="password" type="password" required minLength={8} />
+                    <PasswordInput id="signup_password" name="password" required minLength={8} />
                   </div>
                   <Button type="submit" className="w-full" disabled={loading}>Create account</Button>
                 </form>
@@ -329,6 +348,30 @@ function AuthPage() {
           )}
         </CardContent>
       </Card>
+      <div className="rounded-xl bg-white/10 backdrop-blur border border-white/20 p-4 space-y-3">
+        <div className="flex items-center justify-center gap-2 text-white text-sm font-medium">
+          <Download className="h-4 w-4" />
+          Download the desktop app
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <a
+            href="/JD_Connect.exe"
+            download
+            className="inline-flex items-center justify-center gap-2 rounded-md bg-white text-slate-900 hover:bg-white/90 px-3 py-2 text-sm font-medium transition-colors"
+          >
+            <Monitor className="h-4 w-4" />
+            Windows
+          </a>
+          <a
+            href="/JD_Connect.dmg"
+            download
+            className="inline-flex items-center justify-center gap-2 rounded-md bg-white text-slate-900 hover:bg-white/90 px-3 py-2 text-sm font-medium transition-colors"
+          >
+            <Apple className="h-4 w-4" />
+            macOS
+          </a>
+        </div>
+      </div>
       <p className="text-center text-xs text-white/80">
         Design &amp; Develop by{" "}
         <a

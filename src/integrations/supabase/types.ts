@@ -821,6 +821,67 @@ export type Database = {
         }
         Relationships: []
       }
+      channel_join_requests: {
+        Row: {
+          channel_id: string
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          employee_id: string
+          id: string
+          note: string | null
+          requested_at: string
+          status: Database["public"]["Enums"]["channel_join_status"]
+          updated_at: string
+        }
+        Insert: {
+          channel_id: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          employee_id: string
+          id?: string
+          note?: string | null
+          requested_at?: string
+          status?: Database["public"]["Enums"]["channel_join_status"]
+          updated_at?: string
+        }
+        Update: {
+          channel_id?: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          employee_id?: string
+          id?: string
+          note?: string | null
+          requested_at?: string
+          status?: Database["public"]["Enums"]["channel_join_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "channel_join_requests_channel_id_fkey"
+            columns: ["channel_id"]
+            isOneToOne: false
+            referencedRelation: "channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "channel_join_requests_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "channel_join_requests_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       channel_members: {
         Row: {
           channel_id: string
@@ -1728,6 +1789,7 @@ export type Database = {
           shift_id: string | null
           team_leader_id: string | null
           updated_at: string
+          username: string
         }
         Insert: {
           alias_name?: string | null
@@ -1751,6 +1813,7 @@ export type Database = {
           shift_id?: string | null
           team_leader_id?: string | null
           updated_at?: string
+          username: string
         }
         Update: {
           alias_name?: string | null
@@ -1774,6 +1837,7 @@ export type Database = {
           shift_id?: string | null
           team_leader_id?: string | null
           updated_at?: string
+          username?: string
         }
         Relationships: [
           {
@@ -1972,8 +2036,48 @@ export type Database = {
           },
         ]
       }
+      message_reactions: {
+        Row: {
+          created_at: string
+          emoji: string
+          employee_id: string
+          id: string
+          message_id: string
+        }
+        Insert: {
+          created_at?: string
+          emoji: string
+          employee_id: string
+          id?: string
+          message_id: string
+        }
+        Update: {
+          created_at?: string
+          emoji?: string
+          employee_id?: string
+          id?: string
+          message_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_reactions_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_reactions_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
+          attachments: Json
           body: string
           channel_id: string | null
           conversation_id: string | null
@@ -1982,11 +2086,13 @@ export type Database = {
           edited_at: string | null
           id: string
           is_pinned: boolean
+          parent_message_id: string | null
           read_at: string | null
           sender_id: string
           status: Database["public"]["Enums"]["message_status"]
         }
         Insert: {
+          attachments?: Json
           body: string
           channel_id?: string | null
           conversation_id?: string | null
@@ -1995,11 +2101,13 @@ export type Database = {
           edited_at?: string | null
           id?: string
           is_pinned?: boolean
+          parent_message_id?: string | null
           read_at?: string | null
           sender_id: string
           status?: Database["public"]["Enums"]["message_status"]
         }
         Update: {
+          attachments?: Json
           body?: string
           channel_id?: string | null
           conversation_id?: string | null
@@ -2008,6 +2116,7 @@ export type Database = {
           edited_at?: string | null
           id?: string
           is_pinned?: boolean
+          parent_message_id?: string | null
           read_at?: string | null
           sender_id?: string
           status?: Database["public"]["Enums"]["message_status"]
@@ -2025,6 +2134,13 @@ export type Database = {
             columns: ["conversation_id"]
             isOneToOne: false
             referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_parent_message_id_fkey"
+            columns: ["parent_message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
             referencedColumns: ["id"]
           },
           {
@@ -2132,22 +2248,37 @@ export type Database = {
       }
       permissions: {
         Row: {
+          action: string | null
           created_at: string
           description: string | null
           id: string
+          is_dangerous: boolean
           key: string
+          label: string | null
+          module: string | null
+          sort_order: number
         }
         Insert: {
+          action?: string | null
           created_at?: string
           description?: string | null
           id?: string
+          is_dangerous?: boolean
           key: string
+          label?: string | null
+          module?: string | null
+          sort_order?: number
         }
         Update: {
+          action?: string | null
           created_at?: string
           description?: string | null
           id?: string
+          is_dangerous?: boolean
           key?: string
+          label?: string | null
+          module?: string | null
+          sort_order?: number
         }
         Relationships: []
       }
@@ -2234,21 +2365,27 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
-          key: Database["public"]["Enums"]["app_role"]
+          is_system: boolean
+          key: Database["public"]["Enums"]["app_role"] | null
+          key_text: string | null
           name: string
         }
         Insert: {
           created_at?: string
           description?: string | null
           id?: string
-          key: Database["public"]["Enums"]["app_role"]
+          is_system?: boolean
+          key?: Database["public"]["Enums"]["app_role"] | null
+          key_text?: string | null
           name: string
         }
         Update: {
           created_at?: string
           description?: string | null
           id?: string
-          key?: Database["public"]["Enums"]["app_role"]
+          is_system?: boolean
+          key?: Database["public"]["Enums"]["app_role"] | null
+          key_text?: string | null
           name?: string
         }
         Relationships: []
@@ -2415,27 +2552,46 @@ export type Database = {
           created_at: string
           id: string
           role: Database["public"]["Enums"]["app_role"]
+          role_id: string | null
           user_id: string
         }
         Insert: {
           created_at?: string
           id?: string
           role: Database["public"]["Enums"]["app_role"]
+          role_id?: string | null
           user_id: string
         }
         Update: {
           created_at?: string
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          role_id?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "roles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      admin_list_employee_contacts: {
+        Args: never
+        Returns: {
+          email: string
+          id: string
+          mobile: string
+        }[]
+      }
       agent_performance: {
         Args: { _employee_id: string; _from: string; _to: string }
         Returns: {
@@ -2528,7 +2684,15 @@ export type Database = {
           total_employees: number
         }[]
       }
+      approve_channel_join_request: {
+        Args: { _id: string }
+        Returns: undefined
+      }
       approve_employee: { Args: { _employee_id: string }; Returns: undefined }
+      assign_role_to_user: {
+        Args: { _role_id: string; _user_id: string }
+        Returns: undefined
+      }
       can_access_document: { Args: { _document_id: string }; Returns: boolean }
       can_create_channel: { Args: never; Returns: boolean }
       can_enter_sales_for: { Args: { _employee_id: string }; Returns: boolean }
@@ -2598,6 +2762,7 @@ export type Database = {
           shift_id: string | null
           team_leader_id: string | null
           updated_at: string
+          username: string
         }
         SetofOptions: {
           from: "*"
@@ -2606,7 +2771,12 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      create_custom_role: {
+        Args: { _description: string; _key_text: string; _name: string }
+        Returns: string
+      }
       current_employee_id: { Args: never; Returns: string }
+      delete_custom_role: { Args: { _role_id: string }; Returns: undefined }
       effective_break_limit: {
         Args: {
           _break_type_id: string
@@ -2620,6 +2790,41 @@ export type Database = {
         }[]
       }
       email_for_employee_code: { Args: { _code: string }; Returns: string }
+      get_employee_contact: {
+        Args: { _id: string }
+        Returns: {
+          email: string
+          mobile: string
+        }[]
+      }
+      get_employee_public_profile: {
+        Args: { _id: string }
+        Returns: {
+          alias_name: string
+          centre_name: string
+          department_name: string
+          designation: string
+          employee_code: string
+          employment_status: string
+          full_name: string
+          id: string
+          joining_date: string
+          profile_photo_url: string
+          role_name: string
+          shift_name: string
+        }[]
+      }
+      get_my_contact: {
+        Args: never
+        Returns: {
+          email: string
+          mobile: string
+        }[]
+      }
+      has_permission: {
+        Args: { _perm: string; _user_id: string }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -2634,6 +2839,8 @@ export type Database = {
         Args: { _conversation_id: string }
         Returns: boolean
       }
+      is_current_session: { Args: { _token: string }; Returns: boolean }
+      is_hr: { Args: { _user_id: string }; Returns: boolean }
       knowledge_dashboard: {
         Args: never
         Returns: {
@@ -2674,6 +2881,11 @@ export type Database = {
         }
         Returns: string
       }
+      mark_channel_read: { Args: { _channel_id: string }; Returns: undefined }
+      mark_conversation_read: {
+        Args: { _conversation_id: string }
+        Returns: undefined
+      }
       match_knowledge: {
         Args: {
           match_count?: number
@@ -2700,8 +2912,18 @@ export type Database = {
           views: number
         }[]
       }
+      my_permissions: { Args: never; Returns: string[] }
       purge_old_messages: { Args: never; Returns: undefined }
+      reject_channel_join_request: { Args: { _id: string }; Returns: undefined }
       reject_employee: { Args: { _employee_id: string }; Returns: undefined }
+      rename_custom_role: {
+        Args: { _description: string; _name: string; _role_id: string }
+        Returns: undefined
+      }
+      revoke_role_from_user: {
+        Args: { _role_id: string; _user_id: string }
+        Returns: undefined
+      }
       search_employee_directory: {
         Args: {
           _centre_id?: string
@@ -2724,6 +2946,15 @@ export type Database = {
           profile_photo_url: string
           role_id: string
           role_name: string
+        }[]
+      }
+      search_mention_candidates: {
+        Args: { _limit?: number; _q: string }
+        Returns: {
+          alias_name: string
+          full_name: string
+          id: string
+          username: string
         }[]
       }
       source_analytics: {
@@ -2761,38 +2992,83 @@ export type Database = {
           sales_count: number
         }[]
       }
-      update_self_profile: {
-        Args: { _mobile?: string; _profile_photo_url?: string }
-        Returns: {
-          alias_name: string | null
-          approval_status: string
-          auth_user_id: string | null
-          centre_id: string | null
-          created_at: string
-          department_id: string | null
-          designation: string | null
-          email: string
-          employee_code: string
-          employment_status: Database["public"]["Enums"]["employment_status"]
-          full_name: string
-          id: string
-          joining_date: string | null
-          manager_id: string | null
-          mobile: string | null
-          profile_completed: boolean
-          profile_photo_url: string | null
-          role_id: string | null
-          shift_id: string | null
-          team_leader_id: string | null
-          updated_at: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "employees"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
+      update_self_profile:
+        | {
+            Args: { _mobile?: string; _profile_photo_url?: string }
+            Returns: {
+              alias_name: string | null
+              approval_status: string
+              auth_user_id: string | null
+              centre_id: string | null
+              created_at: string
+              department_id: string | null
+              designation: string | null
+              email: string
+              employee_code: string
+              employment_status: Database["public"]["Enums"]["employment_status"]
+              full_name: string
+              id: string
+              joining_date: string | null
+              manager_id: string | null
+              mobile: string | null
+              profile_completed: boolean
+              profile_photo_url: string | null
+              role_id: string | null
+              shift_id: string | null
+              team_leader_id: string | null
+              updated_at: string
+              username: string
+            }
+            SetofOptions: {
+              from: "*"
+              to: "employees"
+              isOneToOne: true
+              isSetofReturn: false
+            }
+          }
+        | {
+            Args: {
+              _alias_name?: string
+              _centre_id?: string
+              _department_id?: string
+              _joining_date?: string
+              _manager_id?: string
+              _mobile?: string
+              _profile_photo_url?: string
+              _shift_id?: string
+              _team_leader_id?: string
+            }
+            Returns: {
+              alias_name: string | null
+              approval_status: string
+              auth_user_id: string | null
+              centre_id: string | null
+              created_at: string
+              department_id: string | null
+              designation: string | null
+              email: string
+              employee_code: string
+              employment_status: Database["public"]["Enums"]["employment_status"]
+              full_name: string
+              id: string
+              joining_date: string | null
+              manager_id: string | null
+              mobile: string | null
+              profile_completed: boolean
+              profile_photo_url: string | null
+              role_id: string | null
+              shift_id: string | null
+              team_leader_id: string | null
+              updated_at: string
+              username: string
+            }
+            SetofOptions: {
+              from: "*"
+              to: "employees"
+              isOneToOne: true
+              isSetofReturn: false
+            }
+          }
       workforce_monitor: {
         Args: never
         Returns: {
@@ -2804,7 +3080,13 @@ export type Database = {
     }
     Enums: {
       announcement_priority: "normal" | "important" | "critical"
-      app_role: "super_admin" | "admin" | "manager" | "team_leader" | "employee"
+      app_role:
+        | "super_admin"
+        | "admin"
+        | "manager"
+        | "team_leader"
+        | "employee"
+        | "hr"
       attendance_source: "auto" | "manual" | "correction"
       attendance_status:
         | "present"
@@ -2816,6 +3098,7 @@ export type Database = {
         | "holiday"
       break_request_status: "pending" | "approved" | "rejected" | "cancelled"
       break_status: "active" | "completed" | "exceeded" | "cancelled"
+      channel_join_status: "pending" | "approved" | "rejected"
       channel_type: "department" | "team" | "custom" | "announcement"
       conversation_type: "direct" | "group"
       document_audit_action:
@@ -2976,7 +3259,14 @@ export const Constants = {
   public: {
     Enums: {
       announcement_priority: ["normal", "important", "critical"],
-      app_role: ["super_admin", "admin", "manager", "team_leader", "employee"],
+      app_role: [
+        "super_admin",
+        "admin",
+        "manager",
+        "team_leader",
+        "employee",
+        "hr",
+      ],
       attendance_source: ["auto", "manual", "correction"],
       attendance_status: [
         "present",
@@ -2989,6 +3279,7 @@ export const Constants = {
       ],
       break_request_status: ["pending", "approved", "rejected", "cancelled"],
       break_status: ["active", "completed", "exceeded", "cancelled"],
+      channel_join_status: ["pending", "approved", "rejected"],
       channel_type: ["department", "team", "custom", "announcement"],
       conversation_type: ["direct", "group"],
       document_audit_action: [

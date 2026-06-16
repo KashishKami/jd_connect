@@ -2,13 +2,13 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
-export type AppRole = "super_admin" | "admin" | "manager" | "team_leader" | "employee";
+export type AppRole = "super_admin" | "admin" | "hr" | "manager" | "team_leader" | "employee";
 
 interface EmployeeProfile {
   id: string;
   employee_code: string;
   full_name: string;
-  email: string;
+  alias_name: string | null;
   role_id: string | null;
   department_id: string | null;
   centre_id: string | null;
@@ -42,7 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       supabase.from("user_roles").select("role").eq("user_id", uid),
       supabase
         .from("employees")
-        .select("id, employee_code, full_name, email, role_id, department_id, centre_id, designation")
+        .select("id, employee_code, full_name, alias_name, role_id, department_id, centre_id, designation")
         .eq("auth_user_id", uid)
         .maybeSingle(),
     ]);
@@ -83,15 +83,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const localId = localStorage.getItem(SESSION_KEY);
     if (!localId) return;
     const check = async () => {
-      const { data } = await supabase
-        .from("employee_sessions")
-        .select("session_token, is_active")
-        .eq("user_id", user.id)
-        .eq("is_active", true)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (data && data.session_token !== localId) {
+      const { data: ok } = await supabase.rpc("is_current_session", { _token: localId });
+      if (ok === false) {
         await supabase.auth.signOut();
         localStorage.removeItem(SESSION_KEY);
         window.location.href = "/auth?reason=session-replaced";

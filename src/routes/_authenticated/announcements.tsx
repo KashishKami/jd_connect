@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,10 +31,11 @@ type Announcement = {
   acks: { employee_id: string; acknowledged_at: string }[];
 };
 
-function AnnouncementsPage() {
+export function AnnouncementsPage() {
   const { employee, hasRole, isAdmin } = useAuth();
+  const { can } = usePermissions();
   const qc = useQueryClient();
-  const canPost = isAdmin || hasRole("manager");
+  const canPost = isAdmin || hasRole("manager") || can("announcements.post");
 
   const { data: items = [] } = useQuery({
     queryKey: ["announcements"],
@@ -98,7 +100,9 @@ function AnnouncementsPage() {
 }
 
 function NewAnnouncementDialog({ onCreated }: { onCreated: () => void }) {
-  const { employee } = useAuth();
+  const { employee, isAdmin } = useAuth();
+  const { can } = usePermissions();
+  const canPostCritical = isAdmin || can("announcements.post_critical");
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -133,7 +137,7 @@ function NewAnnouncementDialog({ onCreated }: { onCreated: () => void }) {
               <SelectContent>
                 <SelectItem value="normal">Normal</SelectItem>
                 <SelectItem value="important">Important</SelectItem>
-                <SelectItem value="critical">Critical (requires acknowledgement)</SelectItem>
+                {canPostCritical && <SelectItem value="critical">Critical (requires acknowledgement)</SelectItem>}
               </SelectContent>
             </Select>
           </div>

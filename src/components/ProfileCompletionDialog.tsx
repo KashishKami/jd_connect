@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 
 type Ref = { id: string; name: string };
-type EmpRef = { id: string; full_name: string; employee_code: string; roles: { key: string } | null };
+type EmpRef = { id: string; full_name: string; alias_name: string | null; employee_code: string; roles: { key: string } | null };
 
 export function ProfileCompletionDialog() {
   const qc = useQueryClient();
@@ -20,10 +20,12 @@ export function ProfileCompletionDialog() {
       if (!u.user) return null;
       const { data } = await supabase
         .from("employees")
-        .select("id, profile_completed, approval_status, mobile, department_id, centre_id, shift_id, team_leader_id, manager_id, joining_date")
+        .select("id, profile_completed, approval_status, department_id, centre_id, shift_id, team_leader_id, manager_id, joining_date")
         .eq("auth_user_id", u.user.id)
         .maybeSingle();
-      return data;
+      const { data: contact } = await supabase.rpc("get_my_contact");
+      const mobile = (contact?.[0]?.mobile as string | null | undefined) ?? null;
+      return data ? { ...data, mobile } : null;
     },
   });
 
@@ -37,7 +39,7 @@ export function ProfileCompletionDialog() {
         supabase.from("departments").select("id, name").eq("is_active", true).order("name"),
         supabase.from("centres").select("id, name").eq("is_active", true).order("name"),
         supabase.from("shifts").select("id, name").eq("is_active", true).order("name"),
-        supabase.from("employees").select("id, full_name, employee_code, roles(key)").order("full_name"),
+        supabase.from("employees").select("id, full_name, alias_name, employee_code, roles(key)").order("full_name"),
       ]);
       return {
         depts: (d.data ?? []) as Ref[],
@@ -115,8 +117,8 @@ export function ProfileCompletionDialog() {
             <Label>Joining date *</Label>
             <Input type="date" value={joiningDate} onChange={(e) => setJoiningDate(e.target.value)} />
           </div>
-          <Picker label="Team Leader" value={tlId} onChange={setTlId} options={tls.map((x) => ({ id: x.id, name: `${x.full_name} (${x.employee_code})` }))} allowNone />
-          <Picker label="Manager" value={mgrId} onChange={setMgrId} options={mgrs.map((x) => ({ id: x.id, name: `${x.full_name} (${x.employee_code})` }))} allowNone />
+          <Picker label="Team Leader" value={tlId} onChange={setTlId} options={tls.map((x) => ({ id: x.id, name: `${x.alias_name || x.full_name} (${x.employee_code})` }))} allowNone />
+          <Picker label="Manager" value={mgrId} onChange={setMgrId} options={mgrs.map((x) => ({ id: x.id, name: `${x.alias_name || x.full_name} (${x.employee_code})` }))} allowNone />
         </div>
         <DialogFooter>
           <Button onClick={submit} disabled={saving}>{saving ? "Saving…" : "Save & continue"}</Button>

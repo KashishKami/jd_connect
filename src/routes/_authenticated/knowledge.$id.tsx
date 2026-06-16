@@ -38,7 +38,7 @@ function DocDetail() {
       const { data, error } = await supabase
         .from("documents")
         .select(
-          "id, title, description, status, visibility, download_allowed, views_count, downloads_count, keywords, category_id, department_id, current_version_id, uploaded_by, created_at, updated_at, document_categories(name), departments(name), employees(full_name, employee_code)",
+          "id, title, description, status, visibility, download_allowed, views_count, downloads_count, keywords, category_id, department_id, current_version_id, uploaded_by, created_at, updated_at, document_categories(name), departments(name), employees(full_name, alias_name, employee_code)",
         )
         .eq("id", id)
         .maybeSingle();
@@ -52,7 +52,7 @@ function DocDetail() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("document_versions")
-        .select("id, version_label, file_path, file_name, file_size, mime_type, change_notes, created_at, employees(full_name)")
+        .select("id, version_label, file_path, file_name, file_size, mime_type, change_notes, created_at, employees(full_name, alias_name)")
         .eq("document_id", id)
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -220,7 +220,7 @@ function DocDetail() {
             <Row k="Department" v={doc.departments?.name ?? "—"} />
             <Row k="Visibility" v={doc.visibility} />
             <Row k="Downloads allowed" v={doc.download_allowed ? "Yes" : "No"} />
-            <Row k="Uploaded by" v={doc.employees?.full_name ?? "—"} />
+            <Row k="Uploaded by" v={(doc.employees as { full_name?: string; alias_name?: string | null } | null)?.alias_name || doc.employees?.full_name || "—"} />
             <Row k="Uploaded" v={new Date(doc.created_at).toLocaleString()} />
             <Row k="Updated" v={new Date(doc.updated_at).toLocaleString()} />
             <Row k="Views" v={String(doc.views_count ?? 0)} icon={<Eye className="h-3 w-3" />} />
@@ -260,7 +260,7 @@ function DocDetail() {
               {versions.map((v: {
                 id: string; version_label: string; file_path: string; file_name: string;
                 file_size: number; change_notes: string | null; created_at: string;
-                employees: { full_name: string } | null;
+                employees: { full_name: string; alias_name?: string | null } | null;
               }) => (
                 <TableRow key={v.id}>
                   <TableCell className="font-mono text-xs">
@@ -269,7 +269,7 @@ function DocDetail() {
                   </TableCell>
                   <TableCell className="text-xs">{v.file_name}</TableCell>
                   <TableCell className="text-xs">{fmtBytes(v.file_size)}</TableCell>
-                  <TableCell className="text-xs">{v.employees?.full_name ?? "—"}</TableCell>
+                  <TableCell className="text-xs">{v.employees?.alias_name || v.employees?.full_name || "—"}</TableCell>
                   <TableCell className="text-xs">{new Date(v.created_at).toLocaleString()}</TableCell>
                   <TableCell className="text-xs">{v.change_notes ?? "—"}</TableCell>
                   <TableCell className="text-right">

@@ -1,4 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useRouteGuard, AccessDenied } from "@/components/PermissionGate";
+import { usePermissions } from "@/hooks/usePermissions";
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -29,6 +31,10 @@ export const Route = createFileRoute("/_authenticated/knowledge/")({
 });
 
 function KnowledgePage() {
+  const __guard = useRouteGuard("documents.view");
+  const { can } = usePermissions();
+  const { isAdmin } = useAuth();
+  const canUpload = isAdmin || can("documents.upload");
   const { employee } = useAuth();
   const qc = useQueryClient();
 
@@ -141,17 +147,21 @@ function KnowledgePage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  if (!__guard.isLoading && !__guard.allowed) return <AccessDenied perm="documents.view" label="the knowledge base" />;
+
   return (
     <div className="max-w-7xl mx-auto space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-2xl font-semibold flex items-center gap-2">
           <BookOpen className="h-6 w-6" /> Knowledge Base
         </h1>
-        <UploadDialog
-          categories={categories}
-          departments={departments}
-          onDone={() => qc.invalidateQueries({ queryKey: ["documents"] })}
-        />
+        {canUpload && (
+          <UploadDialog
+            categories={categories}
+            departments={departments}
+            onDone={() => qc.invalidateQueries({ queryKey: ["documents"] })}
+          />
+        )}
       </div>
 
       {/* Dashboard tiles */}

@@ -40,18 +40,39 @@ function ProfilePage() {
   const isSelf = me?.id === id;
   const [editOpen, setEditOpen] = useState(false);
 
-  const { data: emp } = useQuery({
+  const { data: emp, isLoading: empLoading } = useQuery({
     queryKey: ["employee", id],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("employees")
-        .select(`*, departments(name), centres(code, name), roles(name, key), shifts(name),
-                 tl:employees!team_leader_id(id, full_name, employee_code),
-                 mgr:employees!manager_id(id, full_name, employee_code)`)
+        .select(`id, employee_code, full_name, alias_name, username, designation, employment_status, approval_status, profile_photo_url, joining_date, department_id, centre_id, role_id, shift_id, team_leader_id, manager_id, auth_user_id, profile_completed, created_at, updated_at,
+                 departments(name), centres(code, name), roles(name, key), shifts(name),
+                 tl:employees!team_leader_id(id, full_name, alias_name, employee_code),
+                 mgr:employees!manager_id(id, full_name, alias_name, employee_code)`)
         .eq("id", id)
         .maybeSingle();
       if (error) throw error;
-      return data;
+      if (!data) return data;
+      // Fetch contact (email/mobile) via guarded RPC — only self or admins receive a row.
+      const { data: contact } = await supabase.rpc("get_employee_contact", { _id: id });
+      const c = (contact?.[0] ?? null) as { email: string | null; mobile: string | null } | null;
+      return { ...data, email: c?.email ?? null, mobile: c?.mobile ?? null };
+    },
+  });
+
+  // If RLS hides the full row, fall back to a safe directory-only public profile.
+  const { data: pub, isLoading: pubLoading } = useQuery({
+    queryKey: ["employee-public", id],
+    enabled: !empLoading && !emp,
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc("get_employee_public_profile", { _id: id });
+      if (error) throw error;
+      return (data?.[0] ?? null) as null | {
+        id: string; full_name: string; alias_name: string | null; employee_code: string;
+        designation: string | null; profile_photo_url: string | null; employment_status: string;
+        joining_date: string | null; department_name: string | null; centre_name: string | null;
+        role_name: string | null; shift_name: string | null;
+      };
     },
   });
 
@@ -68,11 +89,50 @@ function ProfilePage() {
     },
   });
 
-  const canSeeNotes = !notesError;
+  const canSeeNotes = !notesError && !!emp;
+  const limited = !emp && !!pub;
 
-  if (!emp) return <div className="text-muted-foreground">Loading…</div>;
+  if (empLoading || (!emp && pubLoading)) return <div className="text-muted-foreground">Loading…</div>;
+  if (!emp && !pub) return (
+    <div className="space-y-4 max-w-6xl mx-auto">
+      <Link to="/directory" className="text-sm text-muted-foreground hover:text-primary inline-flex items-center gap-1">
+        <ArrowLeft className="h-3 w-3" /> Back to directory
+      </Link>
+      <Card><CardContent className="p-10 text-center text-muted-foreground">
+        <Lock className="mx-auto h-6 w-6 mb-2" />
+        You don't have access to this employee's profile.
+      </CardContent></Card>
+    </div>
+  );
 
-  const initials = emp.full_name.split(" ").map((s: string) => s[0]).slice(0, 2).join("").toUpperCase();
+  const view = ((emp ?? {
+    id: pub!.id,
+    full_name: pub!.full_name,
+    alias_name: pub!.alias_name,
+    employee_code: pub!.employee_code,
+    designation: pub!.designation,
+    profile_photo_url: pub!.profile_photo_url,
+    employment_status: pub!.employment_status,
+    joining_date: pub!.joining_date,
+    email: null,
+    mobile: null,
+    departments: pub!.department_name ? { name: pub!.department_name } : null,
+    centres: pub!.centre_name ? { name: pub!.centre_name } : null,
+    roles: pub!.role_name ? { name: pub!.role_name } : null,
+    shifts: pub!.shift_name ? { name: pub!.shift_name } : null,
+    tl: null, mgr: null,
+  }) as unknown) as {
+    full_name: string; alias_name: string | null; username?: string | null; employee_code: string; employment_status: string;
+    designation: string | null; email: string | null; mobile: string | null;
+    joining_date: string | null;
+    departments: { name: string } | null; centres: { name: string } | null;
+    roles: { name: string } | null; shifts: { name: string } | null;
+    tl: { full_name: string; alias_name: string | null } | { full_name: string; alias_name: string | null }[] | null;
+    mgr: { full_name: string; alias_name: string | null } | { full_name: string; alias_name: string | null }[] | null;
+  };
+
+  const display = view.alias_name || view.full_name;
+  const initials = display.split(" ").map((s: string) => s[0]).slice(0, 2).join("").toUpperCase();
 
   return (
     <div className="space-y-4 max-w-6xl mx-auto">
@@ -86,11 +146,17 @@ function ProfilePage() {
           </Avatar>
           <div className="flex-1 min-w-[240px]">
             <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-2xl font-semibold">{emp.full_name}</h1>
-              <Badge>{emp.employment_status}</Badge>
+              <h1 className="text-2xl font-semibold">{display}</h1>
+              {view.alias_name && view.full_name && view.alias_name.trim().toLowerCase() !== view.full_name.trim().toLowerCase() && (
+                <span className="text-sm text-muted-foreground">({view.full_name})</span>
+              )}
+              <Badge>{view.employment_status}</Badge>
             </div>
-            <p className="text-sm text-muted-foreground font-mono">{emp.employee_code}</p>
-            <p className="text-sm mt-1">{emp.designation ?? "—"}</p>
+            <p className="text-sm text-muted-foreground font-mono">{view.employee_code}</p>
+            {view.username && (
+              <p className="text-sm text-primary font-medium mt-0.5">@{view.username}</p>
+            )}
+            <p className="text-sm mt-1">{view.designation ?? "—"}</p>
           </div>
           {(isSelf || isAdmin) && (
             <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
@@ -100,19 +166,18 @@ function ProfilePage() {
         </CardContent>
       </Card>
 
-      {isAdmin ? (
+      {isAdmin && emp ? (
         <AdminEditEmployeeDialog
           open={editOpen}
           onOpenChange={setEditOpen}
           employee={emp}
           onSaved={() => qc.invalidateQueries({ queryKey: ["employee", id] })}
         />
-      ) : isSelf ? (
+      ) : isSelf && emp ? (
         <EditMyProfileDialog
           open={editOpen}
           onOpenChange={setEditOpen}
-          initialMobile={emp.mobile ?? ""}
-          initialPhoto={emp.profile_photo_url ?? ""}
+          initial={emp as unknown as MyProfileInitial}
           onSaved={() => qc.invalidateQueries({ queryKey: ["employee", id] })}
         />
       ) : null}
@@ -120,29 +185,29 @@ function ProfilePage() {
       <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="notes">Notes &amp; Coaching</TabsTrigger>
-          <TabsTrigger value="attendance">Attendance</TabsTrigger>
-          <TabsTrigger value="sales">Sales</TabsTrigger>
+          {!limited && <TabsTrigger value="notes">Notes &amp; Coaching</TabsTrigger>}
+          {!limited && <TabsTrigger value="attendance">Attendance</TabsTrigger>}
+          {!limited && <TabsTrigger value="sales">Sales</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="overview">
           <Card>
             <CardContent className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <Field label="Email" value={emp.email} />
-              <Field label="Mobile" value={emp.mobile ?? "—"} />
-              <Field label="Department" value={(emp.departments as { name: string } | null)?.name ?? "—"} />
-              <Field label="Designation" value={emp.designation ?? "—"} />
-              <Field label="Centre" value={(emp.centres as { name: string } | null)?.name ?? "—"} />
-              <Field label="Shift" value={(emp.shifts as { name: string } | null)?.name ?? "—"} />
-              <Field label="Role" value={(emp.roles as { name: string } | null)?.name ?? "—"} />
-              <Field label="Joining Date" value={emp.joining_date ?? "—"} />
-              <Field label="Team Leader" value={(Array.isArray(emp.tl) ? emp.tl[0] : emp.tl)?.full_name ?? "—"} />
-              <Field label="Manager" value={(Array.isArray(emp.mgr) ? emp.mgr[0] : emp.mgr)?.full_name ?? "—"} />
+              {!limited && <Field label="Email" value={view.email ?? "—"} />}
+              {!limited && <Field label="Mobile" value={view.mobile ?? "—"} />}
+              <Field label="Department" value={view.departments?.name ?? "—"} />
+              <Field label="Designation" value={view.designation ?? "—"} />
+              <Field label="Centre" value={view.centres?.name ?? "—"} />
+              <Field label="Shift" value={view.shifts?.name ?? "—"} />
+              <Field label="Role" value={view.roles?.name ?? "—"} />
+              <Field label="Joining Date" value={view.joining_date ?? "—"} />
+              {!limited && (() => { const t = Array.isArray(view.tl) ? view.tl[0] : view.tl; return <Field label="Team Leader" value={(t?.alias_name || t?.full_name) ?? "—"} />; })()}
+              {!limited && (() => { const m = Array.isArray(view.mgr) ? view.mgr[0] : view.mgr; return <Field label="Manager" value={(m?.alias_name || m?.full_name) ?? "—"} />; })()}
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="notes">
+        {!limited && <TabsContent value="notes">
           {!canSeeNotes ? (
             <Card><CardContent className="p-10 text-center text-muted-foreground">
               <Lock className="mx-auto h-6 w-6 mb-2" />
@@ -151,14 +216,14 @@ function ProfilePage() {
           ) : (
             <NotesSection employeeId={id} notes={notes ?? []} onChange={() => qc.invalidateQueries({ queryKey: ["notes", id] })} canManage={true} />
           )}
-        </TabsContent>
+        </TabsContent>}
 
-        <TabsContent value="attendance">
+        {!limited && <TabsContent value="attendance">
           <EmployeeAttendance employeeId={id} />
-        </TabsContent>
-        <TabsContent value="sales">
+        </TabsContent>}
+        {!limited && <TabsContent value="sales">
           <EmployeeSales employeeId={id} />
-        </TabsContent>
+        </TabsContent>}
       </Tabs>
 
       {/* Suppress unused warning */}
@@ -167,19 +232,56 @@ function ProfilePage() {
   );
 }
 
+type MyProfileInitial = {
+  mobile: string | null; profile_photo_url: string | null; alias_name: string | null;
+  department_id: string | null; centre_id: string | null; shift_id: string | null;
+  team_leader_id: string | null; manager_id: string | null; joining_date: string | null;
+};
+
 function EditMyProfileDialog({
-  open, onOpenChange, initialMobile, initialPhoto, onSaved,
+  open, onOpenChange, initial, onSaved,
 }: {
   open: boolean; onOpenChange: (v: boolean) => void;
-  initialMobile: string; initialPhoto: string; onSaved: () => void;
+  initial: MyProfileInitial; onSaved: () => void;
 }) {
-  const [mobile, setMobile] = useState(initialMobile);
-  const [photo, setPhoto] = useState(initialPhoto);
+  const [mobile, setMobile] = useState(initial.mobile ?? "");
+  const [photo, setPhoto] = useState(initial.profile_photo_url ?? "");
+  const [alias, setAlias] = useState(initial.alias_name ?? "");
+  const [departmentId, setDepartmentId] = useState<string | null>(initial.department_id);
+  const [centreId, setCentreId] = useState<string | null>(initial.centre_id);
+  const [shiftId, setShiftId] = useState<string | null>(initial.shift_id);
+  const [tlId, setTlId] = useState<string | null>(initial.team_leader_id);
+  const [mgrId, setMgrId] = useState<string | null>(initial.manager_id);
+  const [joiningDate, setJoiningDate] = useState<string>(initial.joining_date ?? "");
+
+  const { data: refs } = useQuery({
+    queryKey: ["self-profile-refs"],
+    enabled: open,
+    queryFn: async () => {
+      const [d, c, s, em] = await Promise.all([
+        supabase.from("departments").select("id, name").eq("is_active", true).order("name"),
+        supabase.from("centres").select("id, name").eq("is_active", true).order("name"),
+        supabase.from("shifts").select("id, name").eq("is_active", true).order("name"),
+        supabase.from("employees").select("id, full_name, alias_name, employee_code, roles(key)").order("full_name"),
+      ]);
+      return { depts: d.data ?? [], centres: c.data ?? [], shifts: s.data ?? [], emps: em.data ?? [] };
+    },
+  });
+  const tls = (refs?.emps ?? []).filter((x) => (x.roles as { key: string } | null)?.key === "team_leader");
+  const mgrs = (refs?.emps ?? []).filter((x) => (x.roles as { key: string } | null)?.key === "manager");
+
   const save = useMutation({
     mutationFn: async () => {
       const { error } = await supabase.rpc("update_self_profile", {
         _mobile: mobile || undefined,
         _profile_photo_url: photo || undefined,
+        _alias_name: alias || undefined,
+        _department_id: departmentId ?? undefined,
+        _centre_id: centreId ?? undefined,
+        _shift_id: shiftId ?? undefined,
+        _team_leader_id: tlId ?? undefined,
+        _manager_id: mgrId ?? undefined,
+        _joining_date: joiningDate || undefined,
       });
       if (error) throw error;
     },
@@ -188,12 +290,20 @@ function EditMyProfileDialog({
   });
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-w-2xl">
         <DialogHeader><DialogTitle>Edit my profile</DialogTitle></DialogHeader>
-        <p className="text-xs text-muted-foreground">You can update your mobile number and profile photo. Other details are managed by an admin.</p>
-        <div className="space-y-3">
+        <p className="text-xs text-muted-foreground">Update your personal details. Role, status, full name and email can only be changed by an admin.</p>
+        <div className="grid grid-cols-2 gap-3 max-h-[60vh] overflow-y-auto pr-1">
+          <div className="col-span-2"><Label>Alias name <span className="text-xs text-muted-foreground">(shown across the platform)</span></Label><Input value={alias} onChange={(e) => setAlias(e.target.value)} maxLength={120} /></div>
           <div><Label>Mobile</Label><Input value={mobile} onChange={(e) => setMobile(e.target.value)} placeholder="e.g. 9876543210" /></div>
-          <div><Label>Profile photo URL</Label><Input value={photo} onChange={(e) => setPhoto(e.target.value)} placeholder="https://…" /></div>
+          <div><Label>Joining date</Label><Input type="date" value={joiningDate} onChange={(e) => setJoiningDate(e.target.value)} /></div>
+          <div className="col-span-2"><Label>Profile photo URL</Label><Input value={photo} onChange={(e) => setPhoto(e.target.value)} placeholder="https://…" /></div>
+          <AdminRefSelect label="Department" value={departmentId} onChange={setDepartmentId} options={refs?.depts ?? []} />
+          <AdminRefSelect label="Centre" value={centreId} onChange={setCentreId} options={refs?.centres ?? []} />
+          <AdminRefSelect label="Shift" value={shiftId} onChange={setShiftId} options={refs?.shifts ?? []} />
+          <div />
+          <AdminRefSelect label="Team Leader" value={tlId} onChange={setTlId} options={tls.map((x) => ({ id: x.id, name: `${(x as { alias_name?: string | null }).alias_name || x.full_name} (${x.employee_code})` }))} />
+          <AdminRefSelect label="Manager" value={mgrId} onChange={setMgrId} options={mgrs.map((x) => ({ id: x.id, name: `${(x as { alias_name?: string | null }).alias_name || x.full_name} (${x.employee_code})` }))} />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
@@ -247,7 +357,7 @@ function AdminEditEmployeeDialog({
         supabase.from("centres").select("id, name").eq("is_active", true).order("name"),
         supabase.from("roles").select("id, name").order("name"),
         supabase.from("shifts").select("id, name").eq("is_active", true).order("name"),
-        supabase.from("employees").select("id, full_name, employee_code, roles(key)").order("full_name"),
+        supabase.from("employees").select("id, full_name, alias_name, employee_code, roles(key)").order("full_name"),
       ]);
       return { depts: d.data ?? [], centres: c.data ?? [], roles: r.data ?? [], shifts: s.data ?? [], emps: em.data ?? [] };
     },
@@ -296,8 +406,8 @@ function AdminEditEmployeeDialog({
           <AdminRefSelect label="Centre" value={form.centre_id} onChange={(v) => set("centre_id", v)} options={refs?.centres ?? []} />
           <AdminRefSelect label="Role" value={form.role_id} onChange={(v) => set("role_id", v)} options={refs?.roles ?? []} />
           <AdminRefSelect label="Shift" value={form.shift_id} onChange={(v) => set("shift_id", v)} options={refs?.shifts ?? []} />
-          <AdminRefSelect label="Team Leader" value={form.team_leader_id} onChange={(v) => set("team_leader_id", v)} options={tls.map((x) => ({ id: x.id, name: `${x.full_name} (${x.employee_code})` }))} />
-          <AdminRefSelect label="Manager" value={form.manager_id} onChange={(v) => set("manager_id", v)} options={mgrs.map((x) => ({ id: x.id, name: `${x.full_name} (${x.employee_code})` }))} />
+          <AdminRefSelect label="Team Leader" value={form.team_leader_id} onChange={(v) => set("team_leader_id", v)} options={tls.map((x) => ({ id: x.id, name: `${(x as { alias_name?: string | null }).alias_name || x.full_name} (${x.employee_code})` }))} />
+          <AdminRefSelect label="Manager" value={form.manager_id} onChange={(v) => set("manager_id", v)} options={mgrs.map((x) => ({ id: x.id, name: `${(x as { alias_name?: string | null }).alias_name || x.full_name} (${x.employee_code})` }))} />
           <div>
             <Label>Status</Label>
             <Select value={form.employment_status} onValueChange={(v) => set("employment_status", v as EmpStatus)}>

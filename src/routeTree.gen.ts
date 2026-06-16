@@ -9,20 +9,27 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as PendingApprovalRouteImport } from './routes/pending-approval'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
+import { Route as AuthenticatedSearchRouteImport } from './routes/_authenticated/search'
 import { Route as AuthenticatedJdaiRouteImport } from './routes/_authenticated/jdai'
 import { Route as AuthenticatedDirectoryRouteImport } from './routes/_authenticated/directory'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedCommunicationRouteImport } from './routes/_authenticated/communication'
+import { Route as AuthenticatedCommandCenterRouteImport } from './routes/_authenticated/command-center'
 import { Route as AuthenticatedChatRouteImport } from './routes/_authenticated/chat'
 import { Route as AuthenticatedChannelsRouteImport } from './routes/_authenticated/channels'
 import { Route as AuthenticatedAnnouncementsRouteImport } from './routes/_authenticated/announcements'
+import { Route as AuthenticatedSplatRouteImport } from './routes/[_]authenticated.$'
 import { Route as AuthenticatedSalesIndexRouteImport } from './routes/_authenticated/sales.index'
 import { Route as AuthenticatedKnowledgeIndexRouteImport } from './routes/_authenticated/knowledge.index'
+import { Route as AuthenticatedChatIndexRouteImport } from './routes/_authenticated/chat.index'
+import { Route as AuthenticatedChannelsIndexRouteImport } from './routes/_authenticated/channels.index'
 import { Route as AuthenticatedBreaksIndexRouteImport } from './routes/_authenticated/breaks.index'
 import { Route as AuthenticatedAttendanceIndexRouteImport } from './routes/_authenticated/attendance.index'
 import { Route as AuthenticatedAnalyticsIndexRouteImport } from './routes/_authenticated/analytics.index'
@@ -43,6 +50,11 @@ import { Route as AuthenticatedAdminDepartmentsRouteImport } from './routes/_aut
 import { Route as AuthenticatedAdminCentresRouteImport } from './routes/_authenticated/admin.centres'
 import { Route as AuthenticatedAdminBreaksRouteImport } from './routes/_authenticated/admin.breaks'
 
+const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
+  id: '/sitemap.xml',
+  path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
   path: '/reset-password',
@@ -72,6 +84,11 @@ const ApiChatRoute = ApiChatRouteImport.update({
   path: '/api/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedSearchRoute = AuthenticatedSearchRouteImport.update({
+  id: '/search',
+  path: '/search',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedJdaiRoute = AuthenticatedJdaiRouteImport.update({
   id: '/jdai',
   path: '/jdai',
@@ -87,6 +104,18 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedCommunicationRoute =
+  AuthenticatedCommunicationRouteImport.update({
+    id: '/communication',
+    path: '/communication',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedCommandCenterRoute =
+  AuthenticatedCommandCenterRouteImport.update({
+    id: '/command-center',
+    path: '/command-center',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedChatRoute = AuthenticatedChatRouteImport.update({
   id: '/chat',
   path: '/chat',
@@ -103,6 +132,11 @@ const AuthenticatedAnnouncementsRoute =
     path: '/announcements',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedSplatRoute = AuthenticatedSplatRouteImport.update({
+  id: '/$',
+  path: '/$',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedSalesIndexRoute = AuthenticatedSalesIndexRouteImport.update({
   id: '/sales/',
   path: '/sales/',
@@ -113,6 +147,17 @@ const AuthenticatedKnowledgeIndexRoute =
     id: '/knowledge/',
     path: '/knowledge/',
     getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedChatIndexRoute = AuthenticatedChatIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthenticatedChatRoute,
+} as any)
+const AuthenticatedChannelsIndexRoute =
+  AuthenticatedChannelsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedChannelsRoute,
   } as any)
 const AuthenticatedBreaksIndexRoute =
   AuthenticatedBreaksIndexRouteImport.update({
@@ -231,12 +276,17 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/pending-approval': typeof PendingApprovalRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/_authenticated/$': typeof AuthenticatedSplatRoute
   '/announcements': typeof AuthenticatedAnnouncementsRoute
   '/channels': typeof AuthenticatedChannelsRouteWithChildren
   '/chat': typeof AuthenticatedChatRouteWithChildren
+  '/command-center': typeof AuthenticatedCommandCenterRoute
+  '/communication': typeof AuthenticatedCommunicationRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/directory': typeof AuthenticatedDirectoryRoute
   '/jdai': typeof AuthenticatedJdaiRoute
+  '/search': typeof AuthenticatedSearchRoute
   '/api/chat': typeof ApiChatRoute
   '/admin/breaks': typeof AuthenticatedAdminBreaksRoute
   '/admin/centres': typeof AuthenticatedAdminCentresRoute
@@ -257,6 +307,8 @@ export interface FileRoutesByFullPath {
   '/analytics/': typeof AuthenticatedAnalyticsIndexRoute
   '/attendance/': typeof AuthenticatedAttendanceIndexRoute
   '/breaks/': typeof AuthenticatedBreaksIndexRoute
+  '/channels/': typeof AuthenticatedChannelsIndexRoute
+  '/chat/': typeof AuthenticatedChatIndexRoute
   '/knowledge/': typeof AuthenticatedKnowledgeIndexRoute
   '/sales/': typeof AuthenticatedSalesIndexRoute
 }
@@ -265,12 +317,15 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/pending-approval': typeof PendingApprovalRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/_authenticated/$': typeof AuthenticatedSplatRoute
   '/announcements': typeof AuthenticatedAnnouncementsRoute
-  '/channels': typeof AuthenticatedChannelsRouteWithChildren
-  '/chat': typeof AuthenticatedChatRouteWithChildren
+  '/command-center': typeof AuthenticatedCommandCenterRoute
+  '/communication': typeof AuthenticatedCommunicationRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/directory': typeof AuthenticatedDirectoryRoute
   '/jdai': typeof AuthenticatedJdaiRoute
+  '/search': typeof AuthenticatedSearchRoute
   '/api/chat': typeof ApiChatRoute
   '/admin/breaks': typeof AuthenticatedAdminBreaksRoute
   '/admin/centres': typeof AuthenticatedAdminCentresRoute
@@ -291,6 +346,8 @@ export interface FileRoutesByTo {
   '/analytics': typeof AuthenticatedAnalyticsIndexRoute
   '/attendance': typeof AuthenticatedAttendanceIndexRoute
   '/breaks': typeof AuthenticatedBreaksIndexRoute
+  '/channels': typeof AuthenticatedChannelsIndexRoute
+  '/chat': typeof AuthenticatedChatIndexRoute
   '/knowledge': typeof AuthenticatedKnowledgeIndexRoute
   '/sales': typeof AuthenticatedSalesIndexRoute
 }
@@ -301,12 +358,17 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/pending-approval': typeof PendingApprovalRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/_authenticated/$': typeof AuthenticatedSplatRoute
   '/_authenticated/announcements': typeof AuthenticatedAnnouncementsRoute
   '/_authenticated/channels': typeof AuthenticatedChannelsRouteWithChildren
   '/_authenticated/chat': typeof AuthenticatedChatRouteWithChildren
+  '/_authenticated/command-center': typeof AuthenticatedCommandCenterRoute
+  '/_authenticated/communication': typeof AuthenticatedCommunicationRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/directory': typeof AuthenticatedDirectoryRoute
   '/_authenticated/jdai': typeof AuthenticatedJdaiRoute
+  '/_authenticated/search': typeof AuthenticatedSearchRoute
   '/api/chat': typeof ApiChatRoute
   '/_authenticated/admin/breaks': typeof AuthenticatedAdminBreaksRoute
   '/_authenticated/admin/centres': typeof AuthenticatedAdminCentresRoute
@@ -327,6 +389,8 @@ export interface FileRoutesById {
   '/_authenticated/analytics/': typeof AuthenticatedAnalyticsIndexRoute
   '/_authenticated/attendance/': typeof AuthenticatedAttendanceIndexRoute
   '/_authenticated/breaks/': typeof AuthenticatedBreaksIndexRoute
+  '/_authenticated/channels/': typeof AuthenticatedChannelsIndexRoute
+  '/_authenticated/chat/': typeof AuthenticatedChatIndexRoute
   '/_authenticated/knowledge/': typeof AuthenticatedKnowledgeIndexRoute
   '/_authenticated/sales/': typeof AuthenticatedSalesIndexRoute
 }
@@ -337,12 +401,17 @@ export interface FileRouteTypes {
     | '/auth'
     | '/pending-approval'
     | '/reset-password'
+    | '/sitemap.xml'
+    | '/_authenticated/$'
     | '/announcements'
     | '/channels'
     | '/chat'
+    | '/command-center'
+    | '/communication'
     | '/dashboard'
     | '/directory'
     | '/jdai'
+    | '/search'
     | '/api/chat'
     | '/admin/breaks'
     | '/admin/centres'
@@ -363,6 +432,8 @@ export interface FileRouteTypes {
     | '/analytics/'
     | '/attendance/'
     | '/breaks/'
+    | '/channels/'
+    | '/chat/'
     | '/knowledge/'
     | '/sales/'
   fileRoutesByTo: FileRoutesByTo
@@ -371,12 +442,15 @@ export interface FileRouteTypes {
     | '/auth'
     | '/pending-approval'
     | '/reset-password'
+    | '/sitemap.xml'
+    | '/_authenticated/$'
     | '/announcements'
-    | '/channels'
-    | '/chat'
+    | '/command-center'
+    | '/communication'
     | '/dashboard'
     | '/directory'
     | '/jdai'
+    | '/search'
     | '/api/chat'
     | '/admin/breaks'
     | '/admin/centres'
@@ -397,6 +471,8 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/attendance'
     | '/breaks'
+    | '/channels'
+    | '/chat'
     | '/knowledge'
     | '/sales'
   id:
@@ -406,12 +482,17 @@ export interface FileRouteTypes {
     | '/auth'
     | '/pending-approval'
     | '/reset-password'
+    | '/sitemap.xml'
+    | '/_authenticated/$'
     | '/_authenticated/announcements'
     | '/_authenticated/channels'
     | '/_authenticated/chat'
+    | '/_authenticated/command-center'
+    | '/_authenticated/communication'
     | '/_authenticated/dashboard'
     | '/_authenticated/directory'
     | '/_authenticated/jdai'
+    | '/_authenticated/search'
     | '/api/chat'
     | '/_authenticated/admin/breaks'
     | '/_authenticated/admin/centres'
@@ -432,6 +513,8 @@ export interface FileRouteTypes {
     | '/_authenticated/analytics/'
     | '/_authenticated/attendance/'
     | '/_authenticated/breaks/'
+    | '/_authenticated/channels/'
+    | '/_authenticated/chat/'
     | '/_authenticated/knowledge/'
     | '/_authenticated/sales/'
   fileRoutesById: FileRoutesById
@@ -442,11 +525,19 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   PendingApprovalRoute: typeof PendingApprovalRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   ApiChatRoute: typeof ApiChatRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/sitemap.xml': {
+      id: '/sitemap.xml'
+      path: '/sitemap.xml'
+      fullPath: '/sitemap.xml'
+      preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reset-password': {
       id: '/reset-password'
       path: '/reset-password'
@@ -489,6 +580,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/search': {
+      id: '/_authenticated/search'
+      path: '/search'
+      fullPath: '/search'
+      preLoaderRoute: typeof AuthenticatedSearchRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/jdai': {
       id: '/_authenticated/jdai'
       path: '/jdai'
@@ -508,6 +606,20 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/communication': {
+      id: '/_authenticated/communication'
+      path: '/communication'
+      fullPath: '/communication'
+      preLoaderRoute: typeof AuthenticatedCommunicationRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/command-center': {
+      id: '/_authenticated/command-center'
+      path: '/command-center'
+      fullPath: '/command-center'
+      preLoaderRoute: typeof AuthenticatedCommandCenterRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/chat': {
@@ -531,6 +643,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAnnouncementsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/$': {
+      id: '/_authenticated/$'
+      path: '/$'
+      fullPath: '/_authenticated/$'
+      preLoaderRoute: typeof AuthenticatedSplatRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/sales/': {
       id: '/_authenticated/sales/'
       path: '/sales'
@@ -544,6 +663,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/knowledge/'
       preLoaderRoute: typeof AuthenticatedKnowledgeIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/chat/': {
+      id: '/_authenticated/chat/'
+      path: '/'
+      fullPath: '/chat/'
+      preLoaderRoute: typeof AuthenticatedChatIndexRouteImport
+      parentRoute: typeof AuthenticatedChatRoute
+    }
+    '/_authenticated/channels/': {
+      id: '/_authenticated/channels/'
+      path: '/'
+      fullPath: '/channels/'
+      preLoaderRoute: typeof AuthenticatedChannelsIndexRouteImport
+      parentRoute: typeof AuthenticatedChannelsRoute
     }
     '/_authenticated/breaks/': {
       id: '/_authenticated/breaks/'
@@ -683,10 +816,12 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedChannelsRouteChildren {
   AuthenticatedChannelsChannelIdRoute: typeof AuthenticatedChannelsChannelIdRoute
+  AuthenticatedChannelsIndexRoute: typeof AuthenticatedChannelsIndexRoute
 }
 
 const AuthenticatedChannelsRouteChildren: AuthenticatedChannelsRouteChildren = {
   AuthenticatedChannelsChannelIdRoute: AuthenticatedChannelsChannelIdRoute,
+  AuthenticatedChannelsIndexRoute: AuthenticatedChannelsIndexRoute,
 }
 
 const AuthenticatedChannelsRouteWithChildren =
@@ -696,22 +831,28 @@ const AuthenticatedChannelsRouteWithChildren =
 
 interface AuthenticatedChatRouteChildren {
   AuthenticatedChatConversationIdRoute: typeof AuthenticatedChatConversationIdRoute
+  AuthenticatedChatIndexRoute: typeof AuthenticatedChatIndexRoute
 }
 
 const AuthenticatedChatRouteChildren: AuthenticatedChatRouteChildren = {
   AuthenticatedChatConversationIdRoute: AuthenticatedChatConversationIdRoute,
+  AuthenticatedChatIndexRoute: AuthenticatedChatIndexRoute,
 }
 
 const AuthenticatedChatRouteWithChildren =
   AuthenticatedChatRoute._addFileChildren(AuthenticatedChatRouteChildren)
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedSplatRoute: typeof AuthenticatedSplatRoute
   AuthenticatedAnnouncementsRoute: typeof AuthenticatedAnnouncementsRoute
   AuthenticatedChannelsRoute: typeof AuthenticatedChannelsRouteWithChildren
   AuthenticatedChatRoute: typeof AuthenticatedChatRouteWithChildren
+  AuthenticatedCommandCenterRoute: typeof AuthenticatedCommandCenterRoute
+  AuthenticatedCommunicationRoute: typeof AuthenticatedCommunicationRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedDirectoryRoute: typeof AuthenticatedDirectoryRoute
   AuthenticatedJdaiRoute: typeof AuthenticatedJdaiRoute
+  AuthenticatedSearchRoute: typeof AuthenticatedSearchRoute
   AuthenticatedAdminBreaksRoute: typeof AuthenticatedAdminBreaksRoute
   AuthenticatedAdminCentresRoute: typeof AuthenticatedAdminCentresRoute
   AuthenticatedAdminDepartmentsRoute: typeof AuthenticatedAdminDepartmentsRoute
@@ -734,12 +875,16 @@ interface AuthenticatedRouteRouteChildren {
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedSplatRoute: AuthenticatedSplatRoute,
   AuthenticatedAnnouncementsRoute: AuthenticatedAnnouncementsRoute,
   AuthenticatedChannelsRoute: AuthenticatedChannelsRouteWithChildren,
   AuthenticatedChatRoute: AuthenticatedChatRouteWithChildren,
+  AuthenticatedCommandCenterRoute: AuthenticatedCommandCenterRoute,
+  AuthenticatedCommunicationRoute: AuthenticatedCommunicationRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedDirectoryRoute: AuthenticatedDirectoryRoute,
   AuthenticatedJdaiRoute: AuthenticatedJdaiRoute,
+  AuthenticatedSearchRoute: AuthenticatedSearchRoute,
   AuthenticatedAdminBreaksRoute: AuthenticatedAdminBreaksRoute,
   AuthenticatedAdminCentresRoute: AuthenticatedAdminCentresRoute,
   AuthenticatedAdminDepartmentsRoute: AuthenticatedAdminDepartmentsRoute,
@@ -770,6 +915,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   PendingApprovalRoute: PendingApprovalRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  SitemapDotxmlRoute: SitemapDotxmlRoute,
   ApiChatRoute: ApiChatRoute,
 }
 export const routeTree = rootRouteImport

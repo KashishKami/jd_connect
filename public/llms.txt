@@ -1,0 +1,7 @@
+# JD Connect
+
+> Internal workforce operating system for JD Fusion employees — attendance, breaks, sales performance, team communication and company knowledge in one portal.
+
+## Pages
+
+- [Sign in](/auth): Employee sign-in to the JD Connect portal.

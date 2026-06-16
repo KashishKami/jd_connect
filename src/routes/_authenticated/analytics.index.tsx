@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useRouteGuard, AccessDenied } from "@/components/PermissionGate";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -19,8 +21,11 @@ export const Route = createFileRoute("/_authenticated/analytics/")({
 });
 
 function Analytics() {
+  const __guard = useRouteGuard("reports.dashboards");
   const { roles, isAdmin, loading } = useAuth();
-  const canView = isAdmin || roles.includes("manager") || roles.includes("team_leader");
+  const { can } = usePermissions();
+  // canView gates the data queries — must match the same permission as the route guard
+  const canView = isAdmin || roles.includes("manager") || roles.includes("team_leader") || can("reports.dashboards");
   const [from, setFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 29); return d.toISOString().slice(0, 10); });
   const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10));
 
@@ -54,6 +59,8 @@ function Analytics() {
 
   if (loading) return null;
   if (!canView) return <Navigate to="/dashboard" />;
+
+  if (!__guard.isLoading && !__guard.allowed) return <AccessDenied perm="reports.dashboards" label="analytics" />;
 
   return (
     <div className="max-w-6xl mx-auto space-y-4">

@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { DeleteRowButton } from "@/components/DeleteRowButton";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export const Route = createFileRoute("/_authenticated/admin/employees")({ component: Page });
 
@@ -29,10 +30,29 @@ function Page() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<EmpRow | null>(null);
+  const { can, canAny } = usePermissions();
+  const canCreate = can("employees.create");
+  const canEdit = canAny("employees.edit_profile", "employees.edit_employment", "employees.assign_role");
+  const canApprove = can("employees.approve");
+  const canDelete = can("employees.delete");
 
+  const EMP_COLS = "id, employee_code, full_name, alias_name, username, designation, employment_status, approval_status, profile_photo_url, joining_date, department_id, centre_id, role_id, shift_id, team_leader_id, manager_id, auth_user_id, profile_completed, created_at, updated_at, departments(name), centres(code), roles(name)";
   const { data: emps } = useQuery({
     queryKey: ["admin-employees"],
-    queryFn: async () => (await supabase.from("employees").select("*, departments(name), centres(code), roles(name)").order("employee_code")).data ?? [],
+    queryFn: async () => {
+      const [{ data: rows }, { data: contacts }] = await Promise.all([
+        supabase.from("employees").select(EMP_COLS).order("employee_code"),
+        supabase.rpc("admin_list_employee_contacts"),
+      ]);
+      const map = new Map<string, { email: string | null; mobile: string | null }>();
+      for (const c of (contacts ?? []) as Array<{ id: string; email: string | null; mobile: string | null }>) {
+        map.set(c.id, { email: c.email, mobile: c.mobile });
+      }
+      return (rows ?? []).map((r) => {
+        const c = map.get((r as { id: string }).id);
+        return { ...r, email: c?.email ?? "", mobile: c?.mobile ?? null };
+      });
+    },
   });
   const { data: refs } = useQuery({
     queryKey: ["admin-emp-refs"],
@@ -90,10 +110,12 @@ function Page() {
             {pendingCount > 0 && <span className="ml-2 inline-flex items-center rounded-full bg-amber-500/10 text-amber-700 px-2 py-0.5 text-xs font-medium">{pendingCount} awaiting approval</span>}
           </p>
         </div>
-        <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setEditing(null); }}>
-          <DialogTrigger asChild><Button onClick={() => setEditing(null)}>Add Employee</Button></DialogTrigger>
-          <EmpDialog refs={refs} editing={editing} onSave={(r) => save.mutate(r)} />
-        </Dialog>
+        {(canCreate || canEdit) && (
+          <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setEditing(null); }}>
+            {canCreate && <DialogTrigger asChild><Button onClick={() => setEditing(null)}>Add Employee</Button></DialogTrigger>}
+            <EmpDialog refs={refs} editing={editing} onSave={(r) => save.mutate(r)} />
+          </Dialog>
+        )}
       </div>
       <Card><CardContent className="p-0"><Table>
         <TableHeader><TableRow>
@@ -125,14 +147,14 @@ function Page() {
               })()}
             </TableCell>
             <TableCell className="flex gap-1">
-              {(e as EmpRow).approval_status !== "approved" && (
+              {canApprove && (e as EmpRow).approval_status !== "approved" && (
                 <Button size="sm" variant="default" onClick={() => approve.mutate(e.id)} disabled={approve.isPending}>Approve</Button>
               )}
-              {(e as EmpRow).approval_status === "pending" && (
+              {canApprove && (e as EmpRow).approval_status === "pending" && (
                 <Button size="sm" variant="outline" onClick={() => reject.mutate(e.id)} disabled={reject.isPending}>Reject</Button>
               )}
-              <Button size="sm" variant="outline" onClick={() => { setEditing(e as EmpRow); setOpen(true); }}>Edit</Button>
-              <DeleteRowButton entity="employee" id={e.id} label={e.full_name} invalidateKeys={[["admin-employees"]]} alreadyTerminated={e.employment_status === "terminated"} />
+              {canEdit && <Button size="sm" variant="outline" onClick={() => { setEditing(e as EmpRow); setOpen(true); }}>Edit</Button>}
+              {canDelete && <DeleteRowButton entity="employee" id={e.id} label={e.full_name} invalidateKeys={[["admin-employees"]]} alreadyTerminated={e.employment_status === "terminated"} />}
             </TableCell>
           </TableRow>
         ))}</TableBody>
@@ -142,7 +164,7 @@ function Page() {
 }
 
 function EmpDialog({ refs, editing, onSave }: {
-  refs: { depts: { id: string; name: string }[]; centres: { id: string; name: string }[]; roles: { id: string; name: string }[]; shifts: { id: string; name: string }[]; emps: { id: string; full_name: string; employee_code: string; role_id: string | null; roles: { key: string } | null }[] } | undefined;
+ refs: { depts: { id: string; name: string }[]; centres: { id: string; name: string }[]; roles: { id: string; name: string }[]; shifts: { id: string; name: string }[]; emps: { id: string; full_name: string; employee_code: string; role_id: string | null; roles: { key: string | null } | null }[] } | undefined;
   editing: EmpRow | null;
   onSave: (row: Partial<EmpRow>) => void;
 }) {
@@ -154,7 +176,8 @@ function EmpDialog({ refs, editing, onSave }: {
     <DialogContent className="max-w-2xl">
       <DialogHeader><DialogTitle>{editing ? "Edit employee" : "New employee"}</DialogTitle></DialogHeader>
       <div className="grid grid-cols-2 gap-3">
-        <div className="col-span-2"><Label>Full name *</Label><Input value={form.full_name ?? ""} onChange={(e) => set("full_name", e.target.value)} /></div>
+        <div><Label>Employee ID *</Label><Input value={form.employee_code ?? ""} onChange={(e) => set("employee_code", e.target.value)} placeholder="e.g. JD-0042" /></div>
+        <div><Label>Full name *</Label><Input value={form.full_name ?? ""} onChange={(e) => set("full_name", e.target.value)} /></div>
         <div className="col-span-2"><Label>Alias name <span className="text-xs text-muted-foreground">(shown across the platform)</span></Label><Input value={form.alias_name ?? ""} onChange={(e) => set("alias_name", e.target.value)} placeholder="e.g. Alex Thomas" /></div>
         <div><Label>Email *</Label><Input type="email" value={form.email ?? ""} onChange={(e) => set("email", e.target.value)} disabled={!!editing} /></div>
         <div><Label>Mobile</Label><Input value={form.mobile ?? ""} onChange={(e) => set("mobile", e.target.value)} /></div>
