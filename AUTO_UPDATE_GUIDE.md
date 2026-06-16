@@ -6,14 +6,38 @@ This document covers everything about how automatic updates work in JD Connect, 
 
 ## How Auto Updates Work
 
-When a user has JD Connect installed and opens it:
+When a user has the JD Connect desktop app installed and opens it:
 
-1. The app silently checks a `latest.json` file hosted on GitHub Releases
-2. It compares the version in that file against the version currently installed
-3. If the remote version is newer, a dialog appears: *"A new version is available. Install now?"*
-4. The user clicks yes — the update downloads, verifies its signature, installs, and the app relaunches
+1. **Background Startup Check**: The app spawns a background thread immediately upon startup.
+2. **Endpoint Query**: It queries the `latest.json` file hosted on GitHub Releases.
+3. **Version Comparison**: It compares the version inside that file against the currently running app version.
+4. **Dialog Notification**: If a newer version is available, a native dialog appears: 
+   *"A new version (vX.X.X) of JD Connect is available. Would you like to download and install it now?"*
+5. **Cryptographic Validation**: If the user clicks **Yes**, the app downloads the update archive and checks the signature against the embedded public key using the `.sig` file.
+6. **Installation & Relaunch**: If validation passes, the update is installed silently, and the app automatically restarts.
 
-No manual download. No reinstall. It just works.
+No manual downloads or manual re-installations are needed.
+
+---
+
+## Understanding Cryptographic Signatures (`.sig` files)
+
+Tauri enforces mandatory cryptographic verification for auto-updates. This is a critical security layer that protects users.
+
+### What are `.sig` files?
+A `.sig` file contains a **Minisign signature** generated using a private signing key. Minisign is a secure cryptographic tool used for signing files and verifying signatures. 
+
+Every platform updater artifact must have a corresponding `.sig` file:
+* `JD Connect_x.x.x_x64_en-US.msi` $\rightarrow$ `JD Connect_x.x.x_x64_en-US.msi.sig`
+* `JD Connect_aarch64.app.tar.gz` $\rightarrow$ `JD Connect_aarch64.app.tar.gz.sig`
+
+### Why are they used?
+Without signatures, auto-updates are extremely vulnerable:
+1. **Preventing MITM (Man-in-the-Middle) Attacks**: If an attacker intercepting the update checks (or compromising your release endpoint) substitutes your `.msi` file with a malicious executable, a signature check ensures it will not run.
+2. **Origin Verification**: The signature proves that the update was built and packaged by the holder of the private signing key (`.tauri-signing-key`).
+3. **Data Integrity**: The signature verifies that the downloaded installer has not been modified or corrupted during transit.
+
+Tauri's updater plugin **strictly refuses** to install any update if the cryptographic signature is missing, cannot be parsed, or fails validation against the public key configured in the application.
 
 ---
 
@@ -29,15 +53,13 @@ Every release produces these files:
 | `JD Connect_aarch64.app.tar.gz` | macOS — **used by the auto updater** |
 | `JD Connect_aarch64.app.tar.gz.sig` | macOS updater signature |
 | `JD Connect_x.x.x_x64_en-US.msi.sig` | Windows updater signature |
-| `latest.json` | The updater manifest — installed apps check this file |
+| `latest.json` | The updater manifest — contains metadata, signature keys, and download links |
 
-### First time vs. updates
+### First-Time Installation vs. Updates
 
-- **`.dmg` and `.exe`** are for users installing the app for the very first time. Share these when onboarding someone new.
-- **`.app.tar.gz` and `.msi`** are what the auto updater downloads silently after the first install. You never need to share these manually.
-- **`latest.json`** is the file every installed copy of the app checks on launch. It contains the version number, download URLs, and cryptographic signatures for both platforms.
-
-Once a user has the app installed, the `.dmg` and `.exe` are never used again.
+* **`.dmg` and `.exe`**: Used for onboarding new users. They package the app into convenient platform installers.
+* **`.app.tar.gz` and `.msi`**: Downloaded automatically by the updater. They represent the raw app bundle needed for hot-swapping the old version.
+* **`latest.json`**: Checked on launch by the client app. Contains version details, changelogs, download links, and platform-specific signatures.
 
 ---
 
@@ -52,23 +74,19 @@ bun tauri signer generate -w .tauri-signing-key
 ```
 
 This produces:
-- `.tauri-signing-key` — private key, **never commit this**
-- `.tauri-signing-key.pub` — public key, goes in `tauri.conf.json`
+* `.tauri-signing-key` — private key, **never commit this**
+* `.tauri-signing-key.pub` — public key, goes in `tauri.conf.json`
 
 ### 2. Add the private key to `.gitignore`
 
-```
-.tauri-signing-key
-```
+Ensure `.tauri-signing-key` is added to your gitignore so it is never leaked.
 
 ### 3. Add the private key to GitHub Secrets
 
-1. Go to your repo → **Settings** → **Secrets and variables** → **Actions**
+1. Go to your repo $\rightarrow$ **Settings** $\rightarrow$ **Secrets and variables** $\rightarrow$ **Actions**
 2. Click **New repository secret**
 3. Name: `TAURI_SIGNING_PRIVATE_KEY`
-4. Value: paste the entire contents of `.tauri-signing-key`
-
-> If you did not set a password when generating the key, do not add a `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secret. GitHub Secrets don't accept blank values. The workflow already handles this by passing `""` directly in the `env` block.
+4. Value: Paste the entire contents of `.tauri-signing-key`
 
 ---
 
@@ -76,9 +94,7 @@ This produces:
 
 ### `src-tauri/tauri.conf.json`
 
-Two things must be present:
-
-**1. `createUpdaterArtifacts: true` in the `bundle` section**
+Ensure your bundle configurations match Tauri v2 specifications:
 
 ```json
 "bundle": {
@@ -89,9 +105,9 @@ Two things must be present:
 }
 ```
 
-Without this, Tauri will not generate `.sig` files at all — even if the signing key is correctly configured. The build succeeds, the `.dmg` and `.exe` get produced, but the updater artifacts are silently skipped. This was the root cause of the "Signature not found" error we hit.
+> **Warning**: Without `createUpdaterArtifacts: true`, Tauri will build release binaries but will skip generating the crucial `.sig` files.
 
-**2. The `updater` plugin section**
+Configure your updater endpoint and embedded public key:
 
 ```json
 "plugins": {
@@ -99,33 +115,65 @@ Without this, Tauri will not generate `.sig` files at all — even if the signin
     "endpoints": [
       "https://github.com/KashishKami/jd_connect/releases/latest/download/latest.json"
     ],
-    "dialog": true,
     "pubkey": "YOUR_PUBLIC_KEY_CONTENTS_HERE"
   }
 }
 ```
 
-The `pubkey` value is the full contents of your `.tauri-signing-key.pub` file.
+*Note: In Tauri v2, setting `"dialog": true` inside `tauri.conf.json` does nothing because the core automatic dialog has been removed. Triggering must be done explicitly in code.*
 
-### `src-tauri/Cargo.toml`
+---
 
-Make sure `tauri-plugin-updater` is in `[dependencies]`:
+## Code Implementation (Tauri v2)
+
+Because Tauri v2 decouples the updater from the user interface, the check is implemented in the Rust backend on application startup.
+
+### 1. Dependencies (`src-tauri/Cargo.toml`)
+
+Add the required plugins to manage updater checks, message dialogs, and app restarts:
 
 ```toml
+[dependencies]
+tauri = { version = "2", features = [] }
 tauri-plugin-updater = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-process = "2"
 ```
 
-> In Tauri v2, do **not** add `features = ["updater"]` to the `tauri` line. That causes a build error. The plugin is separate.
+### 2. Capabilities (`src-tauri/capabilities/default.json`)
 
-### `src-tauri/src/lib.rs`
+Declare the default permissions for the plugins:
 
-Register the updater plugin:
+```json
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "enables the default permissions",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "updater:default",
+    "dialog:default",
+    "process:default"
+  ]
+}
+```
+
+### 3. Application Setup (`src-tauri/src/lib.rs`)
+
+Initialize the plugins and check for updates inside the `setup` hook:
 
 ```rust
+use tauri_plugin_updater::UpdaterExt;
+use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_dialog::{MessageDialogKind, MessageDialogButtons};
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
     .plugin(tauri_plugin_updater::Builder::new().build())
+    .plugin(tauri_plugin_dialog::init())
+    .plugin(tauri_plugin_process::init())
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(
@@ -134,6 +182,51 @@ pub fn run() {
             .build(),
         )?;
       }
+
+      // Check for updates on startup (desktop only)
+      #[cfg(desktop)]
+      {
+        let handle = app.handle().clone();
+        tauri::async_runtime::spawn(async move {
+          if let Ok(updater) = handle.updater() {
+            match updater.check().await {
+              Ok(Some(update)) => {
+                let message = format!(
+                  "A new version (v{}) of JD Connect is available. Would you like to download and install it now?",
+                  update.version
+                );
+
+                let confirmed = handle.dialog()
+                  .message(message)
+                  .title("Update Available")
+                  .kind(MessageDialogKind::Info)
+                  .buttons(MessageDialogButtons::YesNo)
+                  .blocking_show();
+
+                if confirmed {
+                  // Perform download and install
+                  if let Err(e) = update.download_and_install(|_chunk_len, _total_len| {}, || {}).await {
+                    handle.dialog()
+                      .message(format!("Failed to install update: {}", e))
+                      .title("Update Error")
+                      .kind(MessageDialogKind::Error)
+                      .buttons(MessageDialogButtons::Ok)
+                      .blocking_show();
+                  } else {
+                    // Restart to apply
+                    let _ = handle.restart();
+                  }
+                }
+              }
+              Ok(None) => {}
+              Err(e) => {
+                eprintln!("Failed to check for updates: {}", e);
+              }
+            }
+          }
+        });
+      }
+
       Ok(())
     })
     .run(tauri::generate_context!())
@@ -361,80 +454,47 @@ jobs:
 
 ## Releasing a New Version
 
-### Step 1 — Bump the version in `tauri.conf.json`
-
-```json
-"version": "1.0.2"
-```
-
-Versioning convention:
-- `1.0.x` — bug fixes
-- `1.x.0` — new features
-- `x.0.0` — breaking changes
-
-### Step 2 — Commit and push
-
-```cmd
-git add src-tauri/tauri.conf.json
-git commit -m "Bump version to 1.0.2"
-git push
-```
-
-### Step 3 — Tag and push
-
-```cmd
-git tag v1.0.2
-git push origin v1.0.2
-```
-
-This triggers the workflow automatically. Both build jobs run in parallel, then the publish job runs after both finish. The release goes live with all artifacts and `latest.json` correctly populated.
-
-### Step 4 — Users get the update
-
-Next time any installed copy of the app opens, it checks `latest.json`. If the installed version is older, the user sees the update prompt and can install with one click.
+1. **Bump the version** in `src-tauri/tauri.conf.json`.
+2. **Commit and push** the change to GitHub.
+3. **Tag the commit** matching the version (e.g. `v1.0.3`) and push the tag:
+   ```cmd
+   git tag v1.0.3
+   git push origin v1.0.3
+   ```
+4. **CI/CD Build**: The GitHub Actions runner will compile the app for Windows and macOS, sign the binaries using your `TAURI_SIGNING_PRIVATE_KEY` secret, assemble the signatures, generate `latest.json`, and publish them directly to a draft release.
 
 ---
 
 ## Troubleshooting
 
-**"Signature not found for the updater JSON. Skipping upload"**
-`createUpdaterArtifacts: true` is missing from the `bundle` section in `tauri.conf.json`. Without it, Tauri never generates `.sig` files. Add it and rebuild.
-
-**"no assets match the file pattern" in the publish job**
-The `.sig` files weren't in the release when the publish job ran. Make sure the explicit upload steps are present in both build jobs — `tauri-action` with `includeUpdaterJson: false` does not upload `.sig` files on its own.
-
-**YAML syntax error in the workflow**
-Do not use heredocs (`<< EOF`) or multiline `python3 -c "..."` inside a `run:` block — YAML parsers choke on them. Use `jq` with `--arg` flags instead, as the current workflow does.
-
-**Windows upload step fails with "find not found"**
-Use `shell: pwsh` with `Get-ChildItem` on Windows jobs. The Unix `find` command does not exist on Windows runners.
-
-**Build failed, need to retry the same tag**
-
-```cmd
-git tag -d v1.0.2
-git push origin --delete v1.0.2
-git tag v1.0.2
-git push origin v1.0.2
-```
-
-**"Public key does not match" at update time**
-The `pubkey` in `tauri.conf.json` must exactly match your `.tauri-signing-key.pub`. If you ever regenerate the key pair, update the pubkey in the config and re-release.
+* **"Public key does not match"**: Ensure that the public key contents in `tauri.conf.json` match `.tauri-signing-key.pub` exactly. If you generated a new signing key, you must update this value.
+* **Update dialog does not show**:
+  1. Confirm your app's compiled version is strictly lower than the version in the hosted `latest.json`.
+  2. Verify that the client can fetch the release page URL over the network.
+  3. Run the application with `RUST_LOG=debug` to inspect detailed updater log logs.
+* **"Signature not found for the updater JSON. Skipping upload"**: `createUpdaterArtifacts: true` is missing from the `bundle` section in `tauri.conf.json`. Without it, Tauri never generates `.sig` files. Add it and rebuild.
+* **"no assets match the file pattern" in the publish job**: The `.sig` files weren't in the release when the publish job ran. Make sure the explicit upload steps are present in both build jobs.
+* **YAML syntax error in the workflow**: Do not use heredocs (`<< EOF`) or multiline scripts inside a `run:` block. Use `jq` with `--arg` flags instead, as the current workflow does.
+* **Windows upload step fails with "find not found"**: Use `shell: pwsh` with `Get-ChildItem` on Windows jobs. The Unix `find` command does not exist on Windows runners.
+* **Build failed, need to retry the same tag**:
+  ```cmd
+  git tag -d v1.0.2
+  git push origin --delete v1.0.2
+  git tag v1.0.2
+  git push origin v1.0.2
+  ```
 
 ---
 
 ## Checklist
 
-- [ ] `bun tauri signer generate -w .tauri-signing-key`
-- [ ] `.tauri-signing-key` added to `.gitignore`
-- [ ] `TAURI_SIGNING_PRIVATE_KEY` added to GitHub Secrets
-- [ ] `"createUpdaterArtifacts": true` in `bundle` section of `tauri.conf.json`
-- [ ] `updater` plugin configured in `tauri.conf.json` with correct pubkey and endpoint URL
-- [ ] `tauri-plugin-updater = "2"` in `Cargo.toml`
-- [ ] Updater plugin registered in `lib.rs`
-- [ ] Three-job workflow in place (`build-windows`, `build-macos`, `publish-release`)
-- [ ] To release: bump version → commit → `git tag vX.X.X` → `git push origin vX.X.X`
-
----
-
-*Tauri updater docs: [https://tauri.app/plugin/updater/](https://tauri.app/plugin/updater/)*
+* [ ] `bun tauri signer generate -w .tauri-signing-key`
+* [ ] `.tauri-signing-key` added to `.gitignore`
+* [ ] `TAURI_SIGNING_PRIVATE_KEY` added to GitHub Secrets
+* [ ] `"createUpdaterArtifacts": true` in `bundle` section of `tauri.conf.json`
+* [ ] `updater` plugin configured in `tauri.conf.json` with correct pubkey and endpoint URL
+* [ ] `tauri-plugin-updater = "2"` in `Cargo.toml`
+* [ ] `tauri-plugin-dialog = "2"` and `tauri-plugin-process = "2"` added to `Cargo.toml`
+* [ ] Updater, dialog, and process plugins registered in `lib.rs`
+* [ ] Three-job workflow in place (`build-windows`, `build-macos`, `publish-release`)
+* [ ] To release: bump version $\rightarrow$ commit $\rightarrow$ `git tag vX.X.X` $\rightarrow$ `git push origin vX.X.X`
