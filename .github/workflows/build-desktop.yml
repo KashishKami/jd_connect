@@ -6,6 +6,9 @@ on:
       - 'v*'         # Triggers automatically when you push a tag like v1.0.1
   workflow_dispatch: # Also allows manual trigger from GitHub UI (use only for testing)
 
+permissions:
+  contents: write  # Required to create GitHub Releases and upload artifacts
+
 jobs:
 
   build-windows:
