@@ -51,6 +51,28 @@ function AuthPage() {
   const [pendingEmail, setPendingEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [downloadUrls, setDownloadUrls] = useState({
+    win: "https://github.com/KashishKami/jd_connect/releases/latest",
+    mac: "https://github.com/KashishKami/jd_connect/releases/latest",
+  });
+
+  useEffect(() => {
+    fetch("https://api.github.com/repos/KashishKami/jd_connect/releases/latest")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data && data.assets) {
+          const winAsset = data.assets.find((asset: any) => asset.name.endsWith(".exe"));
+          const macAsset = data.assets.find((asset: any) => asset.name.endsWith(".dmg"));
+          setDownloadUrls({
+            win: winAsset?.browser_download_url || "https://github.com/KashishKami/jd_connect/releases/latest",
+            mac: macAsset?.browser_download_url || "https://github.com/KashishKami/jd_connect/releases/latest",
+          });
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to fetch latest release assets:", err);
+      });
+  }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -355,16 +377,18 @@ function AuthPage() {
         </div>
         <div className="grid grid-cols-2 gap-2">
           <a
-            href="/JD_Connect.exe"
-            download
+            href={downloadUrls.win}
+            target="_blank"
+            rel="noopener noreferrer"
             className="inline-flex items-center justify-center gap-2 rounded-md bg-white text-slate-900 hover:bg-white/90 px-3 py-2 text-sm font-medium transition-colors"
           >
             <Monitor className="h-4 w-4" />
             Windows
           </a>
           <a
-            href="/JD_Connect.dmg"
-            download
+            href={downloadUrls.mac}
+            target="_blank"
+            rel="noopener noreferrer"
             className="inline-flex items-center justify-center gap-2 rounded-md bg-white text-slate-900 hover:bg-white/90 px-3 py-2 text-sm font-medium transition-colors"
           >
             <Apple className="h-4 w-4" />
