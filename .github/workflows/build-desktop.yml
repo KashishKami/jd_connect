@@ -153,26 +153,32 @@ jobs:
           MACOS_ASSET_ENC="${MACOS_ASSET// /%20}"
           WIN_ASSET_ENC="${WIN_ASSET// /%20}"
 
-          # Use python3 to safely build JSON (no quoting issues with special chars in sigs)
-          python3 -c "
+          # Write a python script to file to avoid YAML quoting issues
+          cat > gen_json.py << 'PYEOF'
 import json, sys
 data = {
-  'version': sys.argv[1],
-  'notes': 'See the release notes for this version.',
-  'pub_date': sys.argv[2],
-  'platforms': {
-    'darwin-aarch64': {
-      'signature': sys.argv[3],
-      'url': sys.argv[4] + '/' + sys.argv[5]
+  "version": sys.argv[1],
+  "notes": "See the release notes for this version.",
+  "pub_date": sys.argv[2],
+  "platforms": {
+    "darwin-aarch64": {
+      "signature": sys.argv[3],
+      "url": sys.argv[4] + "/" + sys.argv[5]
     },
-    'windows-x86_64': {
-      'signature': sys.argv[6],
-      'url': sys.argv[4] + '/' + sys.argv[7]
+    "windows-x86_64": {
+      "signature": sys.argv[6],
+      "url": sys.argv[4] + "/" + sys.argv[7]
     }
   }
 }
 print(json.dumps(data, indent=2))
-" "$VERSION" "$PUB_DATE" "$MACOS_SIG" "$BASE_URL" "$MACOS_ASSET_ENC" "$WIN_SIG" "$WIN_ASSET_ENC" > latest.json
+PYEOF
+
+          python3 gen_json.py \
+            "$VERSION" "$PUB_DATE" \
+            "$MACOS_SIG" "$BASE_URL" "$MACOS_ASSET_ENC" \
+            "$WIN_SIG" "$WIN_ASSET_ENC" \
+            > latest.json
 
           echo "Generated latest.json:"
           cat latest.json
