@@ -377,14 +377,26 @@ function AuthPage() {
         </div>
         <div className="grid grid-cols-2 gap-2">
           <button
-            onClick={() => window.open(downloadUrls.win, "_blank", "noopener,noreferrer")}
+            onClick={() => {
+              if (downloadUrls.win.endsWith(".exe")) {
+                window.location.href = downloadUrls.win;
+              } else {
+                window.open(downloadUrls.win, "_blank", "noopener,noreferrer");
+              }
+            }}
             className="inline-flex items-center justify-center gap-2 rounded-md bg-white text-slate-900 hover:bg-white/90 px-3 py-2 text-sm font-medium transition-colors cursor-pointer"
           >
             <Monitor className="h-4 w-4" />
             Windows
           </button>
           <button
-            onClick={() => window.open(downloadUrls.mac, "_blank", "noopener,noreferrer")}
+            onClick={() => {
+              if (downloadUrls.mac.endsWith(".dmg")) {
+                window.location.href = downloadUrls.mac;
+              } else {
+                window.open(downloadUrls.mac, "_blank", "noopener,noreferrer");
+              }
+            }}
             className="inline-flex items-center justify-center gap-2 rounded-md bg-white text-slate-900 hover:bg-white/90 px-3 py-2 text-sm font-medium transition-colors cursor-pointer"
           >
             <Apple className="h-4 w-4" />
