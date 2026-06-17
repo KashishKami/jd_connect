@@ -376,24 +376,20 @@ function AuthPage() {
           Download the desktop app
         </div>
         <div className="grid grid-cols-2 gap-2">
-          <a
-            href={downloadUrls.win}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center justify-center gap-2 rounded-md bg-white text-slate-900 hover:bg-white/90 px-3 py-2 text-sm font-medium transition-colors"
+          <button
+            onClick={() => window.open(downloadUrls.win, "_blank", "noopener,noreferrer")}
+            className="inline-flex items-center justify-center gap-2 rounded-md bg-white text-slate-900 hover:bg-white/90 px-3 py-2 text-sm font-medium transition-colors cursor-pointer"
           >
             <Monitor className="h-4 w-4" />
             Windows
-          </a>
-          <a
-            href={downloadUrls.mac}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center justify-center gap-2 rounded-md bg-white text-slate-900 hover:bg-white/90 px-3 py-2 text-sm font-medium transition-colors"
+          </button>
+          <button
+            onClick={() => window.open(downloadUrls.mac, "_blank", "noopener,noreferrer")}
+            className="inline-flex items-center justify-center gap-2 rounded-md bg-white text-slate-900 hover:bg-white/90 px-3 py-2 text-sm font-medium transition-colors cursor-pointer"
           >
             <Apple className="h-4 w-4" />
             macOS
-          </a>
+          </button>
         </div>
       </div>
       <p className="text-center text-xs text-white/80">
