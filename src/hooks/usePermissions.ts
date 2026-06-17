@@ -7,7 +7,7 @@ export function usePermissions() {
   const q = useQuery({
     queryKey: ["my-permissions", user?.id],
     enabled: !!user?.id,
-    staleTime: 60 * 1000, // 60 s — short enough to reflect role changes promptly
+    staleTime: 5 * 60 * 1000,
     queryFn: async () => {
       const { data, error } = await supabase.rpc("my_permissions");
       if (error) throw error;

@@ -64,6 +64,7 @@ export const deleteAdminEntity = createServerFn({ method: "POST" })
       await supabaseAdmin.from("attendance_corrections").update({ reviewed_by: null }).eq("reviewed_by", data.id);
       await supabaseAdmin.from("break_requests").update({ reviewer_id: null }).eq("reviewer_id", data.id);
       await supabaseAdmin.from("break_audit_logs").delete().eq("employee_id", data.id);
+      await supabaseAdmin.from("channel_join_requests").update({ decided_by: null }).eq("decided_by", data.id);
       const { error: delErr } = await supabaseAdmin.from("employees").delete().eq("id", data.id);
       if (delErr) {
         if (delErr.code === "23503") {

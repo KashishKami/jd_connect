@@ -1,3 +1,4 @@
+import { formatDate, formatDateTime } from "@/lib/utils";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Bell, LogOut, User as UserIcon, ChevronDown, CheckCheck } from "lucide-react";
 import { useEffect } from "react";
@@ -127,7 +128,7 @@ export function HeaderActions() {
                       <div className="flex-1 min-w-0">
                         <div className={`text-xs ${n.is_read ? "text-muted-foreground" : "font-medium"}`}>{n.title}</div>
                         {n.body && <div className="text-[11px] text-muted-foreground truncate">{n.body}</div>}
-                        <div className="text-[10px] text-muted-foreground/70 mt-0.5">{new Date(n.created_at).toLocaleString()}</div>
+                        <div className="text-[10px] text-muted-foreground/70 mt-0.5">{formatDateTime(n.created_at)}</div>
                       </div>
                     </div>
                   );

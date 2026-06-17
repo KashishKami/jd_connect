@@ -1,10 +1,10 @@
+import { usePermissions } from "@/hooks/usePermissions";
 import { createFileRoute } from "@tanstack/react-router";
 import { useRouteGuard, AccessDenied } from "@/components/PermissionGate";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { formatDateTime } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/breaks/team")({
   head: () => ({ meta: [{ title: "Team Breaks — JD Connect" }] }),
@@ -26,9 +27,16 @@ function elapsedMin(startISO: string) {
 
 function statusBadge(s: string) {
   const map: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-    active: "default", completed: "secondary", exceeded: "destructive", cancelled: "outline",
+    active: "default",
+    completed: "secondary",
+    exceeded: "destructive",
+    cancelled: "outline",
   };
-  return <Badge variant={map[s] ?? "outline"} className="capitalize">{s}</Badge>;
+  return (
+    <Badge variant={map[s] ?? "outline"} className="capitalize">
+      {s}
+    </Badge>
+  );
 }
 
 function TeamBreaks() {
@@ -131,126 +139,220 @@ function TeamBreaks() {
           <TabsTrigger value="active">Active ({active.length})</TabsTrigger>
           <TabsTrigger value="exceeded">Exceeded ({exceeded.length})</TabsTrigger>
           <TabsTrigger value="history">History</TabsTrigger>
-          <TabsTrigger value="requests">Requests ({requests.filter((r: any) => r.status === "pending").length})</TabsTrigger>
+          <TabsTrigger value="requests">
+            Requests ({requests.filter((r: any) => r.status === "pending").length})
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="active">
-          <Card><CardContent className="p-0">
-            <Table>
-              <TableHeader><TableRow>
-                <TableHead>Employee</TableHead><TableHead>Type</TableHead><TableHead>Started</TableHead>
-                <TableHead>Elapsed</TableHead><TableHead>Limit</TableHead><TableHead>Alert</TableHead>
-              </TableRow></TableHeader>
-              <TableBody>
-                {active.map((b: any) => {
-                  const el = elapsedMin(b.start_at);
-                  const over = b.limit_minutes && el > b.limit_minutes;
-                  return (
-                    <TableRow key={b.id}>
-                      <TableCell>{b.employee?.alias_name || b.employee?.full_name} <span className="text-muted-foreground text-xs">{b.employee?.employee_code}</span></TableCell>
-                      <TableCell>{b.break_type?.name}</TableCell>
-                      <TableCell>{new Date(b.start_at).toLocaleTimeString()}</TableCell>
-                      <TableCell>{el} min</TableCell>
-                      <TableCell>{b.limit_minutes ?? "—"}</TableCell>
-                      <TableCell>{over ? <Badge variant="destructive">Over limit</Badge> : <Badge variant="secondary">OK</Badge>}</TableCell>
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Started</TableHead>
+                    <TableHead>Elapsed</TableHead>
+                    <TableHead>Limit</TableHead>
+                    <TableHead>Alert</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {active.map((b: any) => {
+                    const el = elapsedMin(b.start_at);
+                    const over = b.limit_minutes && el > b.limit_minutes;
+                    return (
+                      <TableRow key={b.id}>
+                        <TableCell>
+                          {b.employee?.alias_name || b.employee?.full_name}{" "}
+                          <span className="text-muted-foreground text-xs">{b.employee?.employee_code}</span>
+                        </TableCell>
+                        <TableCell>{b.break_type?.name}</TableCell>
+                        <TableCell>{new Date(b.start_at).toLocaleTimeString()}</TableCell>
+                        <TableCell>{el} min</TableCell>
+                        <TableCell>{b.limit_minutes ?? "—"}</TableCell>
+                        <TableCell>
+                          {over ? (
+                            <Badge variant="destructive">Over limit</Badge>
+                          ) : (
+                            <Badge variant="secondary">OK</Badge>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                  {active.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-muted-foreground py-6">
+                        No active breaks
+                      </TableCell>
                     </TableRow>
-                  );
-                })}
-                {active.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-6">No active breaks</TableCell></TableRow>}
-              </TableBody>
-            </Table>
-          </CardContent></Card>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="exceeded">
-          <Card><CardContent className="p-0">
-            <Table>
-              <TableHeader><TableRow>
-                <TableHead>Employee</TableHead><TableHead>Type</TableHead><TableHead>Date</TableHead>
-                <TableHead>Duration</TableHead><TableHead>Limit</TableHead>
-              </TableRow></TableHeader>
-              <TableBody>
-                {exceeded.map((b: any) => (
-                  <TableRow key={b.id}>
-                    <TableCell>{b.employee?.alias_name || b.employee?.full_name}</TableCell>
-                    <TableCell>{b.break_type?.name}</TableCell>
-                    <TableCell>{new Date(b.start_at).toLocaleString()}</TableCell>
-                    <TableCell>{b.duration_minutes} min</TableCell>
-                    <TableCell>{b.limit_minutes}</TableCell>
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Duration</TableHead>
+                    <TableHead>Limit</TableHead>
                   </TableRow>
-                ))}
-                {exceeded.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">None</TableCell></TableRow>}
-              </TableBody>
-            </Table>
-          </CardContent></Card>
+                </TableHeader>
+                <TableBody>
+                  {exceeded.map((b: any) => (
+                    <TableRow key={b.id}>
+                      <TableCell>{b.employee?.alias_name || b.employee?.full_name}</TableCell>
+                      <TableCell>{b.break_type?.name}</TableCell>
+                      <TableCell>{formatDateTime(b.start_at)}</TableCell>
+                      <TableCell>{b.duration_minutes} min</TableCell>
+                      <TableCell>{b.limit_minutes}</TableCell>
+                    </TableRow>
+                  ))}
+                  {exceeded.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground py-6">
+                        None
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="history">
-          <Card><CardContent className="p-0">
-            <Table>
-              <TableHeader><TableRow>
-                <TableHead>Employee</TableHead><TableHead>Type</TableHead><TableHead>Start</TableHead>
-                <TableHead>Duration</TableHead><TableHead>Status</TableHead>
-              </TableRow></TableHeader>
-              <TableBody>
-                {history.map((b: any) => (
-                  <TableRow key={b.id}>
-                    <TableCell>{b.employee?.alias_name || b.employee?.full_name}</TableCell>
-                    <TableCell>{b.break_type?.name}</TableCell>
-                    <TableCell>{new Date(b.start_at).toLocaleString()}</TableCell>
-                    <TableCell>{b.duration_minutes ?? "—"}</TableCell>
-                    <TableCell>{statusBadge(b.status)}</TableCell>
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Start</TableHead>
+                    <TableHead>Duration</TableHead>
+                    <TableHead>Status</TableHead>
                   </TableRow>
-                ))}
-                {history.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">No history</TableCell></TableRow>}
-              </TableBody>
-            </Table>
-          </CardContent></Card>
+                </TableHeader>
+                <TableBody>
+                  {history.map((b: any) => (
+                    <TableRow key={b.id}>
+                      <TableCell>{b.employee?.alias_name || b.employee?.full_name}</TableCell>
+                      <TableCell>{b.break_type?.name}</TableCell>
+                      <TableCell>{formatDateTime(b.start_at)}</TableCell>
+                      <TableCell>{b.duration_minutes ?? "—"}</TableCell>
+                      <TableCell>{statusBadge(b.status)}</TableCell>
+                    </TableRow>
+                  ))}
+                  {history.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-muted-foreground py-6">
+                        No history
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="requests">
-          <Card><CardContent className="p-0">
-            <Table>
-              <TableHeader><TableRow>
-                <TableHead>Employee</TableHead><TableHead>Type</TableHead><TableHead>Min</TableHead>
-                <TableHead>Reason</TableHead><TableHead>Status</TableHead><TableHead></TableHead>
-              </TableRow></TableHeader>
-              <TableBody>
-                {requests.map((r: any) => (
-                  <TableRow key={r.id}>
-                    <TableCell>{r.employee?.alias_name || r.employee?.full_name}</TableCell>
-                    <TableCell>{r.break_type?.name ?? "—"}</TableCell>
-                    <TableCell>{r.requested_minutes}</TableCell>
-                    <TableCell className="max-w-xs truncate">{r.reason}</TableCell>
-                    <TableCell><Badge variant={r.status === "pending" ? "secondary" : "outline"}>{r.status}</Badge></TableCell>
-                    <TableCell>
-                      {r.status === "pending" && canManagePolicies && (
-                        <Dialog onOpenChange={(o) => { if (!o) { setReviewing(null); setReviewNotes(""); } }}>
-                          <DialogTrigger asChild>
-                            <Button size="sm" variant="outline" onClick={() => setReviewing(r)}>Review</Button>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader><DialogTitle>Review Request</DialogTitle></DialogHeader>
-                            <div className="space-y-2">
-                              <div className="text-sm"><b>{reviewing?.employee?.alias_name || reviewing?.employee?.full_name}</b> — {reviewing?.requested_minutes} min</div>
-                              <div className="text-sm text-muted-foreground">{reviewing?.reason}</div>
-                              <Label>Notes</Label>
-                              <Textarea value={reviewNotes} onChange={(e) => setReviewNotes(e.target.value)} />
-                            </div>
-                            <DialogFooter>
-                              <Button variant="outline" onClick={() => review.mutate({ id: reviewing.id, status: "rejected", notes: reviewNotes })}>Reject</Button>
-                              <Button onClick={() => review.mutate({ id: reviewing.id, status: "approved", notes: reviewNotes })}>Approve</Button>
-                            </DialogFooter>
-                          </DialogContent>
-                        </Dialog>
-                      )}
-                    </TableCell>
+          <Card>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Min</TableHead>
+                    <TableHead>Reason</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead></TableHead>
                   </TableRow>
-                ))}
-                {requests.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-6">No requests</TableCell></TableRow>}
-              </TableBody>
-            </Table>
-          </CardContent></Card>
+                </TableHeader>
+                <TableBody>
+                  {requests.map((r: any) => (
+                    <TableRow key={r.id}>
+                      <TableCell>{r.employee?.alias_name || r.employee?.full_name}</TableCell>
+                      <TableCell>{r.break_type?.name ?? "—"}</TableCell>
+                      <TableCell>{r.requested_minutes}</TableCell>
+                      <TableCell className="max-w-xs truncate">{r.reason}</TableCell>
+                      <TableCell>
+                        <Badge variant={r.status === "pending" ? "secondary" : "outline"}>{r.status}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        {r.status === "pending" && canManagePolicies && (
+                          <Dialog
+                            onOpenChange={(o) => {
+                              if (!o) {
+                                setReviewing(null);
+                                setReviewNotes("");
+                              }
+                            }}
+                          >
+                            <DialogTrigger asChild>
+                              <Button size="sm" variant="outline" onClick={() => setReviewing(r)}>
+                                Review
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent>
+                              <DialogHeader>
+                                <DialogTitle>Review Request</DialogTitle>
+                              </DialogHeader>
+                              <div className="space-y-2">
+                                <div className="text-sm">
+                                  <b>{reviewing?.employee?.alias_name || reviewing?.employee?.full_name}</b> —{" "}
+                                  {reviewing?.requested_minutes} min
+                                </div>
+                                <div className="text-sm text-muted-foreground">{reviewing?.reason}</div>
+                                <Label>Notes</Label>
+                                <Textarea value={reviewNotes} onChange={(e) => setReviewNotes(e.target.value)} />
+                              </div>
+                              <DialogFooter>
+                                <Button
+                                  variant="outline"
+                                  onClick={() =>
+                                    review.mutate({ id: reviewing.id, status: "rejected", notes: reviewNotes })
+                                  }
+                                >
+                                  Reject
+                                </Button>
+                                <Button
+                                  onClick={() =>
+                                    review.mutate({ id: reviewing.id, status: "approved", notes: reviewNotes })
+                                  }
+                                >
+                                  Approve
+                                </Button>
+                              </DialogFooter>
+                            </DialogContent>
+                          </Dialog>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {requests.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-muted-foreground py-6">
+                        No requests
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

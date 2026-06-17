@@ -1,3 +1,5 @@
+import { formatDate } from "@/lib/utils";
+import { fmtUSD } from "@/lib/csv";
 import { createFileRoute, Navigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -21,7 +23,8 @@ export const Route = createFileRoute("/_authenticated/command-center")({
 function CommandCenterPage() {
   const { isAdmin, hasRole, loading } = useAuth();
   const { can, isLoading: permsLoading } = usePermissions();
-  const canView = isAdmin || hasRole("manager") || hasRole("team_leader") || can("attendance.view_team") || can("sales.view_team");
+  const canView =
+    isAdmin || hasRole("manager") || hasRole("team_leader") || can("attendance.view_team") || can("sales.view_team");
 
   if (loading || permsLoading) return <div className="p-6 text-muted-foreground">Loading…</div>;
   if (!canView) return <Navigate to="/dashboard" />;
@@ -30,26 +33,51 @@ function CommandCenterPage() {
     <div className="max-w-7xl mx-auto space-y-4">
       <div>
         <h1 className="text-2xl font-bold">Command Center</h1>
-        <p className="text-sm text-muted-foreground">Live workforce visibility, leaderboards, and announcement coverage.</p>
+        <p className="text-sm text-muted-foreground">
+          Live workforce visibility, leaderboards, and announcement coverage.
+        </p>
       </div>
       <Tabs defaultValue="live">
         <TabsList>
-          <TabsTrigger value="live"><Users className="h-4 w-4 mr-1.5" />Live</TabsTrigger>
-          <TabsTrigger value="leaderboard"><Trophy className="h-4 w-4 mr-1.5" />Leaderboard</TabsTrigger>
-          <TabsTrigger value="performance"><BarChart3 className="h-4 w-4 mr-1.5" />Performance</TabsTrigger>
-          <TabsTrigger value="acks"><Megaphone className="h-4 w-4 mr-1.5" />Acknowledgements</TabsTrigger>
+          <TabsTrigger value="live">
+            <Users className="h-4 w-4 mr-1.5" />
+            Live
+          </TabsTrigger>
+          <TabsTrigger value="leaderboard">
+            <Trophy className="h-4 w-4 mr-1.5" />
+            Leaderboard
+          </TabsTrigger>
+          <TabsTrigger value="performance">
+            <BarChart3 className="h-4 w-4 mr-1.5" />
+            Performance
+          </TabsTrigger>
+          <TabsTrigger value="acks">
+            <Megaphone className="h-4 w-4 mr-1.5" />
+            Acknowledgements
+          </TabsTrigger>
         </TabsList>
-        <TabsContent value="live" className="mt-4"><LiveStatus /></TabsContent>
-        <TabsContent value="leaderboard" className="mt-4"><Leaderboard /></TabsContent>
-        <TabsContent value="performance" className="mt-4"><PerformanceSnapshots /></TabsContent>
-        <TabsContent value="acks" className="mt-4"><AcknowledgementReport /></TabsContent>
+        <TabsContent value="live" className="mt-4">
+          <LiveStatus />
+        </TabsContent>
+        <TabsContent value="leaderboard" className="mt-4">
+          <Leaderboard />
+        </TabsContent>
+        <TabsContent value="performance" className="mt-4">
+          <PerformanceSnapshots />
+        </TabsContent>
+        <TabsContent value="acks" className="mt-4">
+          <AcknowledgementReport />
+        </TabsContent>
       </Tabs>
     </div>
   );
 }
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
-const monthStartISO = () => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10); };
+const monthStartISO = () => {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+};
 
 function LiveStatus() {
   const { data, isLoading } = useQuery({
@@ -58,8 +86,14 @@ function LiveStatus() {
     queryFn: async () => {
       const today = todayISO();
       const [emps, attendance, breaks] = await Promise.all([
-        supabase.from("employees").select("id, full_name, profile_photo_url, designation").eq("employment_status", "active"),
-        supabase.from("attendance_records").select("employee_id, login_at, logout_at, status, is_late").eq("work_date", today),
+        supabase
+          .from("employees")
+          .select("id, full_name, profile_photo_url, designation")
+          .eq("employment_status", "active"),
+        supabase
+          .from("attendance_records")
+          .select("employee_id, login_at, logout_at, status, is_late")
+          .eq("work_date", today),
         supabase.from("break_records").select("employee_id, start_at, break_type_id").is("end_at", null),
       ]);
       if (emps.error) throw emps.error;
@@ -73,8 +107,8 @@ function LiveStatus() {
 
   const stats = useMemo(() => {
     if (!data) return { present: [], onBreak: [], absent: [], late: [] };
-    const attMap = new Map(data.attendance.map(a => [a.employee_id, a]));
-    const breakSet = new Set(data.breaks.map(b => b.employee_id));
+    const attMap = new Map(data.attendance.map((a) => [a.employee_id, a]));
+    const breakSet = new Set(data.breaks.map((b) => b.employee_id));
     const present: typeof data.employees = [];
     const onBreak: typeof data.employees = [];
     const absent: typeof data.employees = [];
@@ -108,7 +142,17 @@ function LiveStatus() {
   );
 }
 
-function StatCard({ label, count, icon: Icon, tone }: { label: string; count: number; icon: React.ComponentType<{className?: string}>; tone: "success"|"warning"|"muted"|"destructive" }) {
+function StatCard({
+  label,
+  count,
+  icon: Icon,
+  tone,
+}: {
+  label: string;
+  count: number;
+  icon: React.ComponentType<{ className?: string }>;
+  tone: "success" | "warning" | "muted" | "destructive";
+}) {
   const tones: Record<string, string> = {
     success: "text-emerald-600",
     warning: "text-amber-600",
@@ -128,17 +172,38 @@ function StatCard({ label, count, icon: Icon, tone }: { label: string; count: nu
   );
 }
 
-function EmployeeListCard({ title, list, dotClass }: { title: string; list: { id: string; full_name: string; profile_photo_url: string | null; designation: string | null }[]; dotClass: string }) {
+function EmployeeListCard({
+  title,
+  list,
+  dotClass,
+}: {
+  title: string;
+  list: { id: string; full_name: string; profile_photo_url: string | null; designation: string | null }[];
+  dotClass: string;
+}) {
   return (
     <Card>
-      <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center justify-between">{title}<Badge variant="secondary">{list.length}</Badge></CardTitle></CardHeader>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center justify-between">
+          {title}
+          <Badge variant="secondary">{list.length}</Badge>
+        </CardTitle>
+      </CardHeader>
       <CardContent className="space-y-2 max-h-96 overflow-y-auto">
         {list.length === 0 && <div className="text-xs text-muted-foreground">Nobody here.</div>}
-        {list.map(e => (
+        {list.map((e) => (
           <div key={e.id} className="flex items-center gap-2">
             <div className="relative">
-              <Avatar className="h-7 w-7"><AvatarImage src={e.profile_photo_url ?? undefined} /><AvatarFallback>{e.full_name.slice(0,2).toUpperCase()}</AvatarFallback></Avatar>
-              <span className={cn("absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-background", dotClass)} />
+              <Avatar className="h-7 w-7">
+                <AvatarImage src={e.profile_photo_url ?? undefined} />
+                <AvatarFallback>{e.full_name.slice(0, 2).toUpperCase()}</AvatarFallback>
+              </Avatar>
+              <span
+                className={cn(
+                  "absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-background",
+                  dotClass,
+                )}
+              />
             </div>
             <div className="min-w-0">
               <div className="text-sm truncate">{e.full_name}</div>
@@ -152,34 +217,54 @@ function EmployeeListCard({ title, list, dotClass }: { title: string; list: { id
 }
 
 function Leaderboard() {
-  const [range, setRange] = useState<"today"|"month">("month");
+  const [range, setRange] = useState<"today" | "month">("today");
   const { data = [], isLoading } = useQuery({
     queryKey: ["cc-leaderboard", range],
     queryFn: async () => {
       const since = range === "today" ? todayISO() : monthStartISO();
       const { data, error } = await supabase
         .from("sales_entries")
-        .select("employee_id, sales_amount_usd, sales_count, employees!sales_entries_employee_id_fkey(full_name, profile_photo_url)")
+        .select(
+          "employee_id, sales_amount_usd, sales_count, employees!sales_entries_employee_id_fkey(full_name, profile_photo_url)",
+        )
         .gte("sale_date", since);
       if (error) throw error;
       const agg = new Map<string, { name: string; photo: string | null; total: number; count: number }>();
-      for (const row of (data ?? []) as Array<{ employee_id: string; sales_amount_usd: number | null; sales_count: number | null; employees: { full_name: string; profile_photo_url: string | null } | null }>) {
+      for (const row of (data ?? []) as Array<{
+        employee_id: string;
+        sales_amount_usd: number | null;
+        sales_count: number | null;
+        employees: { full_name: string; profile_photo_url: string | null } | null;
+      }>) {
         const id = row.employee_id;
-        const prev = agg.get(id) ?? { name: row.employees?.full_name ?? "Unknown", photo: row.employees?.profile_photo_url ?? null, total: 0, count: 0 };
+        const prev = agg.get(id) ?? {
+          name: row.employees?.full_name ?? "Unknown",
+          photo: row.employees?.profile_photo_url ?? null,
+          total: 0,
+          count: 0,
+        };
         prev.total += Number(row.sales_amount_usd ?? 0);
         prev.count += Number(row.sales_count ?? 0);
         agg.set(id, prev);
       }
-      return Array.from(agg.entries()).map(([id, v]) => ({ id, ...v })).sort((a, b) => b.total - a.total).slice(0, 20);
+      return Array.from(agg.entries())
+        .map(([id, v]) => ({ id, ...v }))
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 20);
     },
   });
 
   return (
     <Card>
       <CardHeader className="flex-row items-center justify-between space-y-0">
-        <CardTitle className="text-base flex items-center gap-2"><Trophy className="h-4 w-4 text-amber-500" />Top Sales</CardTitle>
-        <Select value={range} onValueChange={(v) => setRange(v as "today"|"month")}>
-          <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+        <CardTitle className="text-base flex items-center gap-2">
+          <Trophy className="h-4 w-4 text-amber-500" />
+          Top Sales
+        </CardTitle>
+        <Select value={range} onValueChange={(v) => setRange(v as "today" | "month")}>
+          <SelectTrigger className="w-32">
+            <SelectValue />
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value="today">Today</SelectItem>
             <SelectItem value="month">This Month</SelectItem>
@@ -187,20 +272,40 @@ function Leaderboard() {
         </Select>
       </CardHeader>
       <CardContent>
-        {isLoading ? <div className="text-muted-foreground">Loading…</div> : (
+        {isLoading ? (
+          <div className="text-muted-foreground">Loading…</div>
+        ) : (
           <Table>
-            <TableHeader><TableRow><TableHead className="w-12">#</TableHead><TableHead>Employee</TableHead><TableHead className="text-right">Sales</TableHead><TableHead className="text-right">Revenue</TableHead></TableRow></TableHeader>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-12">#</TableHead>
+                <TableHead>Employee</TableHead>
+                <TableHead className="text-right">Sales</TableHead>
+                <TableHead className="text-right">Revenue</TableHead>
+              </TableRow>
+            </TableHeader>
             <TableBody>
-              {data.length === 0 && <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-6">No sales in this period.</TableCell></TableRow>}
+              {data.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-muted-foreground py-6">
+                    No sales in this period.
+                  </TableCell>
+                </TableRow>
+              )}
               {data.map((row, i) => (
                 <TableRow key={row.id}>
-                  <TableCell><Badge variant={i < 3 ? "default" : "secondary"}>{i + 1}</Badge></TableCell>
+                  <TableCell>
+                    <Badge variant={i < 3 ? "default" : "secondary"}>{i + 1}</Badge>
+                  </TableCell>
                   <TableCell className="flex items-center gap-2">
-                    <Avatar className="h-7 w-7"><AvatarImage src={row.photo ?? undefined} /><AvatarFallback>{row.name.slice(0,2).toUpperCase()}</AvatarFallback></Avatar>
+                    <Avatar className="h-7 w-7">
+                      <AvatarImage src={row.photo ?? undefined} />
+                      <AvatarFallback>{row.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                    </Avatar>
                     <span>{row.name}</span>
                   </TableCell>
                   <TableCell className="text-right">{row.count}</TableCell>
-                  <TableCell className="text-right font-medium">₹{row.total.toLocaleString()}</TableCell>
+                  <TableCell className="text-right font-medium">{fmtUSD(row.total)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -217,7 +322,9 @@ function PerformanceSnapshots() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("performance_snapshots")
-        .select("id, period_type, period_start, period_end, sales_count, gross_revenue, net_revenue, refunds, chargebacks, employees!performance_snapshots_employee_id_fkey(full_name)")
+        .select(
+          "id, period_type, period_start, period_end, sales_count, gross_revenue, net_revenue, refunds, chargebacks, employees!performance_snapshots_employee_id_fkey(full_name)",
+        )
         .order("period_start", { ascending: false })
         .limit(100);
       if (error) throw error;
@@ -227,21 +334,58 @@ function PerformanceSnapshots() {
 
   return (
     <Card>
-      <CardHeader><CardTitle className="text-base">Performance Snapshots</CardTitle></CardHeader>
+      <CardHeader>
+        <CardTitle className="text-base">Performance Snapshots</CardTitle>
+      </CardHeader>
       <CardContent>
-        {isLoading ? <div className="text-muted-foreground">Loading…</div> : (
+        {isLoading ? (
+          <div className="text-muted-foreground">Loading…</div>
+        ) : (
           <Table>
-            <TableHeader><TableRow><TableHead>Employee</TableHead><TableHead>Period</TableHead><TableHead className="text-right">Sales</TableHead><TableHead className="text-right">Gross</TableHead><TableHead className="text-right">Refunds</TableHead><TableHead className="text-right">Net</TableHead></TableRow></TableHeader>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Employee</TableHead>
+                <TableHead>Period</TableHead>
+                <TableHead className="text-right">Sales</TableHead>
+                <TableHead className="text-right">Gross</TableHead>
+                <TableHead className="text-right">Refunds</TableHead>
+                <TableHead className="text-right">Net</TableHead>
+              </TableRow>
+            </TableHeader>
             <TableBody>
-              {data.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-6">No snapshots yet.</TableCell></TableRow>}
-              {(data as Array<{id:string; period_type:string; period_start:string; period_end:string; sales_count:number; gross_revenue:number; net_revenue:number; refunds:number; chargebacks:number; employees:{full_name:string}|null}>).map(s => (
+              {data.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground py-6">
+                    No snapshots yet.
+                  </TableCell>
+                </TableRow>
+              )}
+              {(
+                data as Array<{
+                  id: string;
+                  period_type: string;
+                  period_start: string;
+                  period_end: string;
+                  sales_count: number;
+                  gross_revenue: number;
+                  net_revenue: number;
+                  refunds: number;
+                  chargebacks: number;
+                  employees: { full_name: string } | null;
+                }>
+              ).map((s) => (
                 <TableRow key={s.id}>
                   <TableCell>{s.employees?.full_name ?? "—"}</TableCell>
-                  <TableCell><Badge variant="outline">{s.period_type}</Badge> <span className="text-xs text-muted-foreground ml-1">{s.period_start} → {s.period_end}</span></TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{s.period_type}</Badge>{" "}
+                    <span className="text-xs text-muted-foreground ml-1">
+                      {s.period_start} → {s.period_end}
+                    </span>
+                  </TableCell>
                   <TableCell className="text-right">{s.sales_count}</TableCell>
-                  <TableCell className="text-right">₹{Number(s.gross_revenue).toLocaleString()}</TableCell>
-                  <TableCell className="text-right text-destructive">₹{Number(s.refunds).toLocaleString()}</TableCell>
-                  <TableCell className="text-right font-medium">₹{Number(s.net_revenue).toLocaleString()}</TableCell>
+                  <TableCell className="text-right">{fmtUSD(s.gross_revenue)}</TableCell>
+                  <TableCell className="text-right text-destructive">{fmtUSD(s.refunds)}</TableCell>
+                  <TableCell className="text-right font-medium">{fmtUSD(s.net_revenue)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -257,7 +401,12 @@ function AcknowledgementReport() {
     queryKey: ["cc-acks"],
     queryFn: async () => {
       const [{ data: anns, error: e1 }, { count: total, error: e2 }] = await Promise.all([
-        supabase.from("announcements").select("id, title, priority, requires_ack, created_at, acks:announcement_acknowledgements(employee_id)").eq("requires_ack", true).order("created_at", { ascending: false }).limit(50),
+        supabase
+          .from("announcements")
+          .select("id, title, priority, requires_ack, created_at, acks:announcement_acknowledgements(employee_id)")
+          .eq("requires_ack", true)
+          .order("created_at", { ascending: false })
+          .limit(50),
         supabase.from("employees").select("id", { count: "exact", head: true }).eq("employment_status", "active"),
       ]);
       if (e1) throw e1;
@@ -270,25 +419,70 @@ function AcknowledgementReport() {
 
   return (
     <Card>
-      <CardHeader><CardTitle className="text-base flex items-center gap-2"><CheckCircle2 className="h-4 w-4" />Critical Acknowledgements</CardTitle></CardHeader>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2">
+          <CheckCircle2 className="h-4 w-4" />
+          Critical Acknowledgements
+        </CardTitle>
+      </CardHeader>
       <CardContent>
         <Table>
-          <TableHeader><TableRow><TableHead>Title</TableHead><TableHead>Priority</TableHead><TableHead>Posted</TableHead><TableHead className="text-right">Acknowledged</TableHead><TableHead className="text-right">Coverage</TableHead></TableRow></TableHeader>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Title</TableHead>
+              <TableHead>Priority</TableHead>
+              <TableHead>Posted</TableHead>
+              <TableHead className="text-right">Acknowledged</TableHead>
+              <TableHead className="text-right">Coverage</TableHead>
+            </TableRow>
+          </TableHeader>
           <TableBody>
-            {(data?.anns ?? []).length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">No announcements requiring acknowledgement.</TableCell></TableRow>}
-            {(data?.anns ?? []).map((a: { id: string; title: string; priority: string; created_at: string; acks: { employee_id: string }[] }) => {
-              const ackCount = a.acks?.length ?? 0;
-              const pct = data!.total ? Math.round((ackCount / data!.total) * 100) : 0;
-              return (
-                <TableRow key={a.id}>
-                  <TableCell className="font-medium">{a.title}</TableCell>
-                  <TableCell><Badge variant={a.priority === "critical" ? "destructive" : a.priority === "important" ? "default" : "secondary"}>{a.priority}</Badge></TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{new Date(a.created_at).toLocaleDateString()}</TableCell>
-                  <TableCell className="text-right">{ackCount} / {data!.total}</TableCell>
-                  <TableCell className="text-right"><Badge variant={pct >= 80 ? "default" : pct >= 50 ? "secondary" : "destructive"}>{pct}%</Badge></TableCell>
-                </TableRow>
-              );
-            })}
+            {(data?.anns ?? []).length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center text-muted-foreground py-6">
+                  No announcements requiring acknowledgement.
+                </TableCell>
+              </TableRow>
+            )}
+            {(data?.anns ?? []).map(
+              (a: {
+                id: string;
+                title: string;
+                priority: string;
+                created_at: string;
+                acks: { employee_id: string }[];
+              }) => {
+                const ackCount = a.acks?.length ?? 0;
+                const pct = data!.total ? Math.round((ackCount / data!.total) * 100) : 0;
+                return (
+                  <TableRow key={a.id}>
+                    <TableCell className="font-medium">{a.title}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          a.priority === "critical"
+                            ? "destructive"
+                            : a.priority === "important"
+                              ? "default"
+                              : "secondary"
+                        }
+                      >
+                        {a.priority}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {formatDate(a.created_at)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {ackCount} / {data!.total}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Badge variant={pct >= 80 ? "default" : pct >= 50 ? "secondary" : "destructive"}>{pct}%</Badge>
+                    </TableCell>
+                  </TableRow>
+                );
+              },
+            )}
           </TableBody>
         </Table>
       </CardContent>

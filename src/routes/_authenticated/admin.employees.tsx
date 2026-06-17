@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,8 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { toast } from "sonner";
 import { DeleteRowButton } from "@/components/DeleteRowButton";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useAuth } from "@/hooks/useAuth";
+import { adminSetEmployeePassword } from "@/lib/admin-password.functions";
 
 export const Route = createFileRoute("/_authenticated/admin/employees")({ component: Page });
 
@@ -35,6 +38,9 @@ function Page() {
   const canEdit = canAny("employees.edit_profile", "employees.edit_employment", "employees.assign_role");
   const canApprove = can("employees.approve");
   const canDelete = can("employees.delete");
+  const { isAdmin } = useAuth();
+  const canResetPassword = isAdmin;
+  const [pwTarget, setPwTarget] = useState<EmpRow | null>(null);
 
   const EMP_COLS = "id, employee_code, full_name, alias_name, username, designation, employment_status, approval_status, profile_photo_url, joining_date, department_id, centre_id, role_id, shift_id, team_leader_id, manager_id, auth_user_id, profile_completed, created_at, updated_at, departments(name), centres(code), roles(name)";
   const { data: emps } = useQuery({
@@ -154,11 +160,15 @@ function Page() {
                 <Button size="sm" variant="outline" onClick={() => reject.mutate(e.id)} disabled={reject.isPending}>Reject</Button>
               )}
               {canEdit && <Button size="sm" variant="outline" onClick={() => { setEditing(e as EmpRow); setOpen(true); }}>Edit</Button>}
+              {canResetPassword && (
+                <Button size="sm" variant="outline" onClick={() => setPwTarget(e as EmpRow)}>Password</Button>
+              )}
               {canDelete && <DeleteRowButton entity="employee" id={e.id} label={e.full_name} invalidateKeys={[["admin-employees"]]} alreadyTerminated={e.employment_status === "terminated"} />}
             </TableCell>
           </TableRow>
         ))}</TableBody>
       </Table></CardContent></Card>
+      <PasswordDialog target={pwTarget} onClose={() => setPwTarget(null)} />
     </div>
   );
 }
@@ -218,5 +228,52 @@ function RefSelect({ label, value, onChange, options }: { label: string; value: 
         </SelectContent>
       </Select>
     </div>
+  );
+}
+
+function PasswordDialog({ target, onClose }: { target: EmpRow | null; onClose: () => void }) {
+  const [pw, setPw] = useState("");
+  const [pw2, setPw2] = useState("");
+  const setPassword = useServerFn(adminSetEmployeePassword);
+  const m = useMutation({
+    mutationFn: async () => {
+      if (!target) throw new Error("No employee selected");
+      if (pw.length < 8) throw new Error("Password must be at least 8 characters");
+      if (pw !== pw2) throw new Error("Passwords do not match");
+      await setPassword({ data: { employee_id: target.id, new_password: pw } });
+    },
+    onSuccess: () => {
+      toast.success("Password updated");
+      setPw(""); setPw2(""); onClose();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+  return (
+    <Dialog open={!!target} onOpenChange={(v) => { if (!v) { setPw(""); setPw2(""); onClose(); } }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Reset password</DialogTitle>
+        </DialogHeader>
+        {target && (
+          <p className="text-sm text-muted-foreground">
+            Set a new password for <span className="font-medium text-foreground">{target.alias_name || target.full_name}</span> ({target.employee_code}).
+          </p>
+        )}
+        <div className="space-y-3">
+          <div>
+            <Label>New password</Label>
+            <Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} autoComplete="new-password" />
+          </div>
+          <div>
+            <Label>Confirm password</Label>
+            <Input type="password" value={pw2} onChange={(e) => setPw2(e.target.value)} autoComplete="new-password" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={() => m.mutate()} disabled={m.isPending}>{m.isPending ? "Updating…" : "Update password"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

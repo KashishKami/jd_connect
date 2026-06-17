@@ -1,3 +1,4 @@
+import { formatDate, formatDateTime } from "@/lib/utils";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -236,6 +237,7 @@ type MyProfileInitial = {
   mobile: string | null; profile_photo_url: string | null; alias_name: string | null;
   department_id: string | null; centre_id: string | null; shift_id: string | null;
   team_leader_id: string | null; manager_id: string | null; joining_date: string | null;
+  designation: string | null;
 };
 
 function EditMyProfileDialog({
@@ -247,6 +249,7 @@ function EditMyProfileDialog({
   const [mobile, setMobile] = useState(initial.mobile ?? "");
   const [photo, setPhoto] = useState(initial.profile_photo_url ?? "");
   const [alias, setAlias] = useState(initial.alias_name ?? "");
+  const [designation, setDesignation] = useState(initial.designation ?? "");
   const [departmentId, setDepartmentId] = useState<string | null>(initial.department_id);
   const [centreId, setCentreId] = useState<string | null>(initial.centre_id);
   const [shiftId, setShiftId] = useState<string | null>(initial.shift_id);
@@ -276,6 +279,7 @@ function EditMyProfileDialog({
         _mobile: mobile || undefined,
         _profile_photo_url: photo || undefined,
         _alias_name: alias || undefined,
+        _designation: designation || undefined,
         _department_id: departmentId ?? undefined,
         _centre_id: centreId ?? undefined,
         _shift_id: shiftId ?? undefined,
@@ -297,6 +301,7 @@ function EditMyProfileDialog({
           <div className="col-span-2"><Label>Alias name <span className="text-xs text-muted-foreground">(shown across the platform)</span></Label><Input value={alias} onChange={(e) => setAlias(e.target.value)} maxLength={120} /></div>
           <div><Label>Mobile</Label><Input value={mobile} onChange={(e) => setMobile(e.target.value)} placeholder="e.g. 9876543210" /></div>
           <div><Label>Joining date</Label><Input type="date" value={joiningDate} onChange={(e) => setJoiningDate(e.target.value)} /></div>
+          <div className="col-span-2"><Label>Job title</Label><Input value={designation} onChange={(e) => setDesignation(e.target.value)} maxLength={120} placeholder="e.g. Senior Sales Executive" /></div>
           <div className="col-span-2"><Label>Profile photo URL</Label><Input value={photo} onChange={(e) => setPhoto(e.target.value)} placeholder="https://…" /></div>
           <AdminRefSelect label="Department" value={departmentId} onChange={setDepartmentId} options={refs?.depts ?? []} />
           <AdminRefSelect label="Centre" value={centreId} onChange={setCentreId} options={refs?.centres ?? []} />
@@ -553,7 +558,7 @@ function NotesSection({ employeeId, notes, onChange, canManage }: { employeeId: 
                   <Badge variant="secondary">{n.category.replace(/_/g, " ")}</Badge>
                   <span>{n.title}</span>
                 </CardTitle>
-                <span className="text-xs text-muted-foreground">{new Date(n.created_at).toLocaleString()}</span>
+                <span className="text-xs text-muted-foreground">{formatDateTime(n.created_at)}</span>
               </div>
             </CardHeader>
             <CardContent className="text-sm whitespace-pre-wrap">{n.content}
@@ -607,7 +612,7 @@ function EmployeeAttendance({ employeeId }: { employeeId: string }) {
             {data.length === 0 && <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">No attendance records.</TableCell></TableRow>}
             {data.map((r) => (
               <TableRow key={r.id}>
-                <TableCell>{r.work_date}</TableCell>
+                <TableCell>{formatDate(r.work_date)}</TableCell>
                 <TableCell>{titleCase(r.status)}</TableCell>
                 <TableCell>{r.login_at ? new Date(r.login_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}</TableCell>
                 <TableCell>{r.logout_at ? new Date(r.logout_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}</TableCell>

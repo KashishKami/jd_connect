@@ -7,6 +7,20 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Hash, MessageSquare, X } from "lucide-react";
+// Tauri notification plugin is optional (desktop only). Load dynamically
+// so the web build doesn't fail when the package isn't installed.
+async function loadTauriNotification(): Promise<{
+  isPermissionGranted: () => Promise<boolean>;
+  requestPermission: () => Promise<string>;
+  sendNotification: (opts: { title: string; body: string }) => void;
+} | null> {
+  try {
+    // @ts-expect-error optional desktop-only module
+    return await import(/* @vite-ignore */ "@tauri-apps/plugin-notification");
+  } catch {
+    return null;
+  }
+}
 
 type Incoming = {
   kind: "direct" | "channel";
@@ -20,7 +34,12 @@ type Incoming = {
 };
 
 function initials(n: string) {
-  return n.split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
+  return n
+    .split(" ")
+    .map((s) => s[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 }
 
 /**
@@ -62,7 +81,12 @@ export function ChatNotifier() {
       .channel("my-conv-membership-" + employee.id)
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "conversation_participants", filter: `employee_id=eq.${employee.id}` },
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "conversation_participants",
+          filter: `employee_id=eq.${employee.id}`,
+        },
         (payload) => {
           const cid = (payload.new as { conversation_id?: string })?.conversation_id;
           if (cid) myConvIds.current.add(cid);
@@ -91,73 +115,147 @@ export function ChatNotifier() {
     };
   }, [employee?.id, qc]);
 
+  // Request browser/Tauri notification permission on mount
+  useEffect(() => {
+    const requestPerms = async () => {
+      const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+      if (isTauri) {
+        try {
+          const tauri = await loadTauriNotification();
+          if (!tauri) return;
+          let hasPerm = await tauri.isPermissionGranted();
+          if (!hasPerm) {
+            const permission = await tauri.requestPermission();
+            hasPerm = permission === "granted";
+          }
+        } catch (err) {
+          console.error("Failed to request Tauri notification permission", err);
+        }
+      } else if (typeof window !== "undefined" && "Notification" in window) {
+        if (Notification.permission === "default") {
+          void Notification.requestPermission();
+        }
+      }
+    };
+    void requestPerms();
+  }, []);
+
   useEffect(() => {
     if (!employee?.id) return;
     const ch = supabase
       .channel("global-messages-" + employee.id)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages" },
-        async (payload) => {
-          const m = payload.new as { id: string; conversation_id: string | null; channel_id: string | null; sender_id: string; body: string; created_at: string };
-          if (m.sender_id === employee.id) return;
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, async (payload) => {
+        const m = payload.new as {
+          id: string;
+          conversation_id: string | null;
+          channel_id: string | null;
+          sender_id: string;
+          body: string;
+          created_at: string;
+        };
+        if (m.sender_id === employee.id) return;
 
-          const isDirect = !!m.conversation_id;
-          const targetId = m.conversation_id ?? m.channel_id;
-          if (!targetId) return;
-          if (isDirect && !myConvIds.current.has(targetId)) return;
-          if (!isDirect && !myChannelIds.current.has(targetId)) return;
-          if (isDirect && pathname.startsWith(`/chat/${targetId}`)) return;
-          if (!isDirect && pathname.startsWith(`/channels/${targetId}`)) return;
+        const isDirect = !!m.conversation_id;
+        const targetId = m.conversation_id ?? m.channel_id;
+        if (!targetId) return;
+        if (isDirect && !myConvIds.current.has(targetId)) return;
+        if (!isDirect && !myChannelIds.current.has(targetId)) return;
+        if (isDirect && pathname.startsWith(`/chat/${targetId}`)) return;
+        if (!isDirect && pathname.startsWith(`/channels/${targetId}`)) return;
 
-          const { data: sender } = await supabase
-            .from("employees")
-            .select("full_name, alias_name")
-            .eq("id", m.sender_id)
-            .maybeSingle();
-          let senderName = (sender?.alias_name || sender?.full_name) ?? null;
-          if (!senderName) {
-            const { data: pub } = await supabase.rpc("get_employee_public_profile", { _id: m.sender_id });
-            const row = Array.isArray(pub) ? pub[0] : pub;
-            const r = row as { full_name?: string; alias_name?: string | null } | null;
-            senderName = (r?.alias_name || r?.full_name) ?? "Someone";
+        const { data: sender } = await supabase
+          .from("employees")
+          .select("full_name, alias_name")
+          .eq("id", m.sender_id)
+          .maybeSingle();
+        let senderName = (sender?.alias_name || sender?.full_name) ?? null;
+        if (!senderName) {
+          const { data: pub } = await supabase.rpc("get_employee_public_profile", { _id: m.sender_id });
+          const row = Array.isArray(pub) ? pub[0] : pub;
+          const r = row as { full_name?: string; alias_name?: string | null } | null;
+          senderName = (r?.alias_name || r?.full_name) ?? "Someone";
+        }
+        const channelName = !isDirect ? (channelNames.current.get(targetId) ?? "channel") : null;
+
+        const incoming: Incoming = {
+          kind: isDirect ? "direct" : "channel",
+          targetId,
+          messageId: m.id,
+          senderId: m.sender_id,
+          senderName,
+          title: isDirect ? senderName : `#${channelName}`,
+          body: m.body,
+          at: m.created_at,
+        };
+
+        void qc.invalidateQueries({ queryKey: ["notifications"] });
+        if (incoming.kind === "direct") {
+          void qc.invalidateQueries({ queryKey: ["messages", incoming.targetId] });
+          void qc.invalidateQueries({ queryKey: ["conversations"] });
+          void qc.invalidateQueries({ queryKey: ["chat-message-meta"] });
+        } else {
+          void qc.invalidateQueries({ queryKey: ["ch-messages", incoming.targetId] });
+          void qc.invalidateQueries({ queryKey: ["channels"] });
+        }
+
+        // Trigger browser / Tauri notification
+        const showSystemNotification = async () => {
+          const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+          if (isTauri) {
+            try {
+              const tauri = await loadTauriNotification();
+              if (!tauri) return;
+              let hasPerm = await tauri.isPermissionGranted();
+              if (!hasPerm) {
+                const permission = await tauri.requestPermission();
+                hasPerm = permission === "granted";
+              }
+              if (hasPerm) {
+                tauri.sendNotification({
+                  title: incoming.title,
+                  body: incoming.body,
+                });
+              }
+            } catch (err) {
+              console.error("Failed to send Tauri notification", err);
+            }
+          } else if (
+            typeof window !== "undefined" &&
+            "Notification" in window &&
+            Notification.permission === "granted"
+          ) {
+            try {
+              const notification = new Notification(incoming.title, {
+                body: incoming.body,
+              });
+              notification.onclick = () => {
+                window.focus();
+                if (incoming.kind === "direct") {
+                  void navigate({ to: "/chat/$conversationId", params: { conversationId: incoming.targetId } });
+                } else {
+                  void navigate({ to: "/channels/$channelId", params: { channelId: incoming.targetId } });
+                }
+              };
+            } catch (err) {
+              console.error("Failed to trigger browser notification", err);
+            }
           }
-          const channelName = !isDirect ? (channelNames.current.get(targetId) ?? "channel") : null;
+        };
+        void showSystemNotification();
 
-          const incoming: Incoming = {
-            kind: isDirect ? "direct" : "channel",
-            targetId,
-            messageId: m.id,
-            senderId: m.sender_id,
-            senderName,
-            title: isDirect ? senderName : `#${channelName}`,
-            body: m.body,
-            at: m.created_at,
-          };
-
-          void qc.invalidateQueries({ queryKey: ["notifications"] });
-          if (incoming.kind === "direct") {
-            void qc.invalidateQueries({ queryKey: ["messages", incoming.targetId] });
-            void qc.invalidateQueries({ queryKey: ["conversations"] });
-            void qc.invalidateQueries({ queryKey: ["chat-message-meta"] });
-          }
-          else {
-            void qc.invalidateQueries({ queryKey: ["ch-messages", incoming.targetId] });
-            void qc.invalidateQueries({ queryKey: ["channels"] });
-          }
-
-          // Floating bottom-right popup (collapse to one per thread, most recent body)
-          setPopups((prev) => {
-            const without = prev.filter((p) => p.kind !== incoming.kind || p.targetId !== incoming.targetId);
-            return [incoming, ...without].slice(0, 3);
-          });
-          window.setTimeout(() => {
-            setPopups((prev) => prev.filter((p) => p.messageId !== incoming.messageId));
-          }, 5000);
-        },
-      )
+        // Floating bottom-right popup (collapse to one per thread, most recent body)
+        setPopups((prev) => {
+          const without = prev.filter((p) => p.kind !== incoming.kind || p.targetId !== incoming.targetId);
+          return [incoming, ...without].slice(0, 3);
+        });
+        window.setTimeout(() => {
+          setPopups((prev) => prev.filter((p) => p.messageId !== incoming.messageId));
+        }, 5000);
+      })
       .subscribe();
-    return () => { supabase.removeChannel(ch); };
+    return () => {
+      supabase.removeChannel(ch);
+    };
   }, [employee?.id, pathname, navigate, qc]);
 
   if (popups.length === 0) return null;
@@ -175,7 +273,11 @@ export function ChatNotifier() {
           }}
         >
           <div className="flex items-start gap-2">
-            <Avatar className="h-8 w-8"><AvatarFallback>{p.kind === "channel" ? <Hash className="h-4 w-4" /> : initials(p.senderName)}</AvatarFallback></Avatar>
+            <Avatar className="h-8 w-8">
+              <AvatarFallback>
+                {p.kind === "channel" ? <Hash className="h-4 w-4" /> : initials(p.senderName)}
+              </AvatarFallback>
+            </Avatar>
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium truncate flex items-center gap-1">
                 {p.kind === "channel" ? <Hash className="h-3 w-3" /> : <MessageSquare className="h-3 w-3" />} {p.title}

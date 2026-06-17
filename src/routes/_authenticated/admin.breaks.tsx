@@ -1,3 +1,4 @@
+import { formatDate, formatDateTime } from "@/lib/utils";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -216,7 +217,7 @@ function AdminBreaks() {
                   <TableRow key={b.id}>
                     <TableCell>{(b.employee as { full_name?: string; alias_name?: string | null })?.alias_name || b.employee?.full_name} <span className="text-xs text-muted-foreground">{b.employee?.employee_code}</span></TableCell>
                     <TableCell>{b.break_type?.name}</TableCell>
-                    <TableCell>{new Date(b.start_at).toLocaleString()}</TableCell>
+                    <TableCell>{formatDateTime(b.start_at)}</TableCell>
                     <TableCell>{b.duration_minutes} min</TableCell>
                     <TableCell>{b.limit_minutes}</TableCell>
                   </TableRow>

@@ -1,13 +1,35 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
-  LayoutDashboard, Users, Building2, Briefcase, Clock, Shield, BookUser, Activity, Search,
-  CalendarCheck, CalendarDays, ClipboardList, Coffee, MessagesSquare,
-  TrendingUp, BarChart3, Tag,
-  BookOpen, Sparkles,
+  LayoutDashboard,
+  Users,
+  Building2,
+  Briefcase,
+  Clock,
+  Shield,
+  BookUser,
+  Activity,
+  Search,
+  CalendarCheck,
+  CalendarDays,
+  ClipboardList,
+  Coffee,
+  MessagesSquare,
+  TrendingUp,
+  BarChart3,
+  Tag,
+  BookOpen,
+  Sparkles,
 } from "lucide-react";
 import {
-  Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
-  SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +41,12 @@ const main = [
   { title: "Directory", url: "/directory", icon: BookUser, perm: "employees.view" },
   { title: "Search", url: "/search", icon: Search },
   { title: "Communication", url: "/communication", icon: MessagesSquare },
-  { title: "Command Center", url: "/command-center", icon: Activity, perm: ["attendance.view_team", "sales.view_team"] },
+  {
+    title: "Command Center",
+    url: "/command-center",
+    icon: Activity,
+    perm: ["attendance.view_team", "sales.view_team"],
+  },
   { title: "My Attendance", url: "/attendance", icon: CalendarCheck },
   { title: "Team Attendance", url: "/attendance/team", icon: ClipboardList, perm: "attendance.view_team" },
   { title: "My Breaks", url: "/breaks", icon: Coffee },
@@ -51,7 +78,9 @@ export function AppSidebar() {
   const isActive = (u: string) => {
     if (path === u) return true;
     if (!path.startsWith(u + "/")) return false;
-    return !allUrls.some((other) => other !== u && other.length > u.length && (path === other || path.startsWith(other + "/")));
+    return !allUrls.some(
+      (other) => other !== u && other.length > u.length && (path === other || path.startsWith(other + "/")),
+    );
   };
   const unread = useCommUnread();
   const { can, isLoading: permsLoading } = usePermissions();
@@ -60,7 +89,9 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border">
         <div className="flex items-center gap-2 px-2 py-3">
-          <div className="h-8 w-8 rounded-md bg-sidebar-primary text-sidebar-primary-foreground grid place-items-center font-bold">JD</div>
+          <div className="h-8 w-8 rounded-md bg-sidebar-primary text-sidebar-primary-foreground grid place-items-center font-bold">
+            JD
+          </div>
           <div className="flex flex-col leading-tight group-data-[collapsible=icon]:hidden">
             <span className="text-sm font-semibold text-sidebar-foreground">JD Connect</span>
             <span className="text-xs text-sidebar-foreground/60">Employee Portal</span>
@@ -84,20 +115,20 @@ export function AppSidebar() {
                   return can(perm);
                 })
                 .map((item) => (
-                <SidebarMenuItem key={item.url}>
-                  <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
-                    <Link to={item.url}>
-                      <item.icon />
-                      <span>{item.title}</span>
-                      {item.url === "/communication" && unread.total > 0 && (
-                        <Badge className="ml-auto h-5 min-w-5 justify-center px-1.5 text-[10px]">
-                          {unread.total > 99 ? "99+" : unread.total}
-                        </Badge>
-                      )}
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+                  <SidebarMenuItem key={item.url}>
+                    <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
+                      <Link to={item.url}>
+                        <item.icon />
+                        <span>{item.title}</span>
+                        {item.url === "/communication" && unread.total > 0 && (
+                          <Badge className="ml-auto h-5 min-w-5 justify-center px-1.5 text-[10px]">
+                            {unread.total > 99 ? "99+" : unread.total}
+                          </Badge>
+                        )}
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -110,15 +141,15 @@ export function AppSidebar() {
                 {admin
                   .filter((item) => isAdmin || can(item.perm))
                   .map((item) => (
-                  <SidebarMenuItem key={item.url}>
-                    <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
-                      <Link to={item.url}>
-                        <item.icon />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
+                    <SidebarMenuItem key={item.url}>
+                      <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
+                        <Link to={item.url}>
+                          <item.icon />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

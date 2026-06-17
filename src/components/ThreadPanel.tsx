@@ -1,3 +1,4 @@
+import { formatDate, formatDateTime } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -101,7 +102,7 @@ function MessageRow({ m }: { m: ReplyMsg }) {
     <div className="text-sm group">
       <div className="flex items-baseline gap-2">
         <span className="font-medium">{m.employees?.full_name ?? "—"}</span>
-        <span className="text-[10px] text-muted-foreground">{new Date(m.created_at).toLocaleString()}</span>
+        <span className="text-[10px] text-muted-foreground">{formatDateTime(m.created_at)}</span>
       </div>
       <div className="whitespace-pre-wrap">{renderMessageBody(m.body)}</div>
       <AttachmentList attachments={(m.attachments ?? []) as ChatAttachment[]} />

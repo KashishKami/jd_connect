@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { LogIn, LogOut } from "lucide-react";
+import { formatDate } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/attendance/")({
   head: () => ({ meta: [{ title: "My Attendance — JD Connect" }] }),
@@ -128,7 +129,7 @@ function MyAttendance() {
       </div>
 
       <Card>
-        <CardHeader className="pb-3"><CardTitle className="text-base">Today — {today()}</CardTitle></CardHeader>
+        <CardHeader className="pb-3"><CardTitle className="text-base">Today — {formatDate(today())}</CardTitle></CardHeader>
         <CardContent className="flex flex-wrap items-center gap-6">
           <div className="flex flex-col">
             <span className="text-xs uppercase text-muted-foreground">Status</span>
@@ -181,7 +182,7 @@ function MyAttendance() {
             <TableBody>
               {(history ?? []).map((r) => (
                 <TableRow key={r.id}>
-                  <TableCell className="font-mono text-xs">{r.work_date}</TableCell>
+                  <TableCell className="font-mono text-xs">{formatDate(r.work_date)}</TableCell>
                   <TableCell className="font-mono text-xs">{r.login_at ? new Date(r.login_at).toLocaleTimeString() : "—"}</TableCell>
                   <TableCell className="font-mono text-xs">{r.logout_at ? new Date(r.logout_at).toLocaleTimeString() : "—"}</TableCell>
                   <TableCell className="font-mono text-xs">{r.hours_worked ?? "—"}</TableCell>
@@ -204,7 +205,7 @@ function MyAttendance() {
             <TableBody>
               {(holidays ?? []).map((h) => (
                 <TableRow key={h.id}>
-                  <TableCell className="font-mono text-xs">{h.holiday_date}</TableCell>
+                  <TableCell className="font-mono text-xs">{formatDate(h.holiday_date)}</TableCell>
                   <TableCell className="font-medium">{h.name}</TableCell>
                   <TableCell className="text-muted-foreground">{h.notes ?? "—"}</TableCell>
                 </TableRow>
@@ -280,8 +281,8 @@ function LeavesPanel({ employeeId, leaves, onChange }: { employeeId: string | un
           {leaves.map((l) => (
             <TableRow key={l.id}>
               <TableCell className="capitalize">{l.leave_type.replace("_", " ")}</TableCell>
-              <TableCell className="font-mono text-xs">{l.start_date}</TableCell>
-              <TableCell className="font-mono text-xs">{l.end_date}</TableCell>
+              <TableCell className="font-mono text-xs">{formatDate(l.start_date)}</TableCell>
+              <TableCell className="font-mono text-xs">{formatDate(l.end_date)}</TableCell>
               <TableCell className="max-w-[260px] truncate" title={l.reason}>{l.reason}</TableCell>
               <TableCell><Badge variant={l.status === "approved" ? "default" : l.status === "rejected" ? "destructive" : "secondary"}>{l.status}</Badge></TableCell>
               <TableCell className="text-xs text-muted-foreground">{l.review_notes ?? "—"}</TableCell>

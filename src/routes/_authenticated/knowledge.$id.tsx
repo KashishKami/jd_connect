@@ -1,3 +1,4 @@
+import { formatDate, formatDateTime } from "@/lib/utils";
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -221,8 +222,8 @@ function DocDetail() {
             <Row k="Visibility" v={doc.visibility} />
             <Row k="Downloads allowed" v={doc.download_allowed ? "Yes" : "No"} />
             <Row k="Uploaded by" v={(doc.employees as { full_name?: string; alias_name?: string | null } | null)?.alias_name || doc.employees?.full_name || "—"} />
-            <Row k="Uploaded" v={new Date(doc.created_at).toLocaleString()} />
-            <Row k="Updated" v={new Date(doc.updated_at).toLocaleString()} />
+            <Row k="Uploaded" v={formatDateTime(doc.created_at)} />
+            <Row k="Updated" v={formatDateTime(doc.updated_at)} />
             <Row k="Views" v={String(doc.views_count ?? 0)} icon={<Eye className="h-3 w-3" />} />
             <Row k="Downloads" v={String(doc.downloads_count ?? 0)} icon={<DownloadIcon className="h-3 w-3" />} />
             {doc.keywords?.length > 0 && (
@@ -270,7 +271,7 @@ function DocDetail() {
                   <TableCell className="text-xs">{v.file_name}</TableCell>
                   <TableCell className="text-xs">{fmtBytes(v.file_size)}</TableCell>
                   <TableCell className="text-xs">{v.employees?.alias_name || v.employees?.full_name || "—"}</TableCell>
-                  <TableCell className="text-xs">{new Date(v.created_at).toLocaleString()}</TableCell>
+                  <TableCell className="text-xs">{formatDateTime(v.created_at)}</TableCell>
                   <TableCell className="text-xs">{v.change_notes ?? "—"}</TableCell>
                   <TableCell className="text-right">
                     {(doc.download_allowed || canManage) && (

@@ -1,3 +1,4 @@
+import { formatDate, formatDateTime } from "@/lib/utils";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useRouteGuard, AccessDenied } from "@/components/PermissionGate";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -276,7 +277,7 @@ function KnowledgePage() {
                       <TableCell className="text-right text-xs">{d.views_count}</TableCell>
                       <TableCell className="text-right text-xs">{d.downloads_count}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {new Date(d.updated_at).toLocaleDateString()}
+                        {formatDate(d.updated_at)}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -324,7 +325,7 @@ function KnowledgePage() {
                           <Calendar className="h-4 w-4 text-muted-foreground" />
                           {r.documents.title}
                         </Link>
-                        <span className="text-xs text-muted-foreground">{new Date(r.viewed_at).toLocaleString()}</span>
+                        <span className="text-xs text-muted-foreground">{formatDateTime(r.viewed_at)}</span>
                       </li>
                     )
                   ))}

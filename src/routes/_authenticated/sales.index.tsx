@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Download, TrendingUp } from "lucide-react";
 import { downloadCSV, toCSV, fmtUSD } from "@/lib/csv";
+import { formatDate } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/sales/")({
   head: () => ({ meta: [{ title: "My Sales — JD Connect" }] }),
@@ -31,7 +32,7 @@ function range(p: Period): { from: string; to: string } {
 
 function MySales() {
   const { employee } = useAuth();
-  const [period, setPeriod] = useState<Period>("month");
+  const [period, setPeriod] = useState<Period>("day");
   const { from, to } = useMemo(() => range(period), [period]);
 
   const { data: perf } = useQuery({
@@ -109,7 +110,7 @@ function MySales() {
               {entries.map((e: any) => (
                 <div key={e.id} className="flex items-center justify-between border-b py-2">
                   <div>
-                    <div className="font-medium">{e.sale_date} · {e.sales_sources?.name ?? "—"}</div>
+                    <div className="font-medium">{formatDate(e.sale_date)} · {e.sales_sources?.name ?? "—"}</div>
                     {e.notes && <div className="text-xs text-muted-foreground">{e.notes}</div>}
                   </div>
                   <div className="text-right">

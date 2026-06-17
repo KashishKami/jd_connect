@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { formatDateTime } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,7 +43,9 @@ export function AnnouncementsPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("announcements")
-        .select("id, title, body, priority, requires_ack, created_at, acks:announcement_acknowledgements(employee_id, acknowledged_at)")
+        .select(
+          "id, title, body, priority, requires_ack, created_at, acks:announcement_acknowledgements(employee_id, acknowledged_at)",
+        )
         .order("created_at", { ascending: false })
         .limit(100);
       if (error) throw error;
@@ -52,21 +55,33 @@ export function AnnouncementsPage() {
 
   const ack = async (id: string) => {
     if (!employee?.id) return;
-    const { error } = await supabase.from("announcement_acknowledgements").insert({ announcement_id: id, employee_id: employee.id });
+    const { error } = await supabase
+      .from("announcement_acknowledgements")
+      .insert({ announcement_id: id, employee_id: employee.id });
     if (error) toast.error(error.message);
-    else { toast.success("Acknowledged"); qc.invalidateQueries({ queryKey: ["announcements"] }); }
+    else {
+      toast.success("Acknowledged");
+      qc.invalidateQueries({ queryKey: ["announcements"] });
+    }
   };
 
   return (
     <div className="max-w-4xl mx-auto space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold flex items-center gap-2"><Megaphone className="h-6 w-6" /> Announcements</h1>
+        <h1 className="text-2xl font-semibold flex items-center gap-2">
+          <Megaphone className="h-6 w-6" /> Announcements
+        </h1>
         {canPost && <NewAnnouncementDialog onCreated={() => qc.invalidateQueries({ queryKey: ["announcements"] })} />}
       </div>
-      {items.length === 0 && <Card><CardContent className="p-10 text-center text-muted-foreground">No announcements yet.</CardContent></Card>}
+      {items.length === 0 && (
+        <Card>
+          <CardContent className="p-10 text-center text-muted-foreground">No announcements yet.</CardContent>
+        </Card>
+      )}
       {items.map((a) => {
         const myAck = a.acks?.some((x) => x.employee_id === employee?.id);
-        const priorityColor = a.priority === "critical" ? "destructive" : a.priority === "important" ? "default" : "secondary";
+        const priorityColor =
+          a.priority === "critical" ? "destructive" : a.priority === "important" ? "default" : "secondary";
         return (
           <Card key={a.id} className={a.priority === "critical" ? "border-destructive" : ""}>
             <CardHeader className="pb-2">
@@ -77,18 +92,24 @@ export function AnnouncementsPage() {
                 </CardTitle>
                 <Badge variant={priorityColor}>{a.priority}</Badge>
               </div>
-              <p className="text-xs text-muted-foreground">{new Date(a.created_at).toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground">{formatDateTime(a.created_at)}</p>
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm whitespace-pre-wrap">{a.body}</p>
               {a.requires_ack && (
                 <div className="flex items-center justify-between border-t pt-3">
                   {myAck ? (
-                    <span className="text-xs text-muted-foreground flex items-center gap-1"><CheckCircle2 className="h-3 w-3 text-green-500" /> You've acknowledged this</span>
+                    <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3 text-green-500" /> You've acknowledged this
+                    </span>
                   ) : (
-                    <Button size="sm" onClick={() => ack(a.id)}>I Have Read This</Button>
+                    <Button size="sm" onClick={() => ack(a.id)}>
+                      I Have Read This
+                    </Button>
                   )}
-                  {canPost && <span className="text-xs text-muted-foreground">{a.acks?.length ?? 0} acknowledgement(s)</span>}
+                  {canPost && (
+                    <span className="text-xs text-muted-foreground">{a.acks?.length ?? 0} acknowledgement(s)</span>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -112,28 +133,49 @@ function NewAnnouncementDialog({ onCreated }: { onCreated: () => void }) {
   const submit = async () => {
     if (!title.trim() || !body.trim() || !employee?.id) return;
     const { error } = await supabase.from("announcements").insert({
-      title: title.trim(), body: body.trim(), priority,
+      title: title.trim(),
+      body: body.trim(),
+      priority,
       requires_ack: priority === "critical" ? true : requiresAck,
       created_by: employee.id,
     });
-    if (error) { toast.error(error.message); return; }
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     toast.success("Announcement posted");
-    setOpen(false); setTitle(""); setBody(""); setPriority("normal"); setRequiresAck(false);
+    setOpen(false);
+    setTitle("");
+    setBody("");
+    setPriority("normal");
+    setRequiresAck(false);
     onCreated();
   };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild><Button>New Announcement</Button></DialogTrigger>
+      <DialogTrigger asChild>
+        <Button>New Announcement</Button>
+      </DialogTrigger>
       <DialogContent>
-        <DialogHeader><DialogTitle>New announcement</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>New announcement</DialogTitle>
+        </DialogHeader>
         <div className="space-y-3">
-          <div><Label>Title</Label><Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} /></div>
-          <div><Label>Body</Label><Textarea value={body} onChange={(e) => setBody(e.target.value)} rows={6} maxLength={5000} /></div>
+          <div>
+            <Label>Title</Label>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} />
+          </div>
+          <div>
+            <Label>Body</Label>
+            <Textarea value={body} onChange={(e) => setBody(e.target.value)} rows={6} maxLength={5000} />
+          </div>
           <div>
             <Label>Priority</Label>
             <Select value={priority} onValueChange={(v) => setPriority(v as "normal" | "important" | "critical")}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="normal">Normal</SelectItem>
                 <SelectItem value="important">Important</SelectItem>
@@ -148,7 +190,9 @@ function NewAnnouncementDialog({ onCreated }: { onCreated: () => void }) {
             </div>
           )}
         </div>
-        <DialogFooter><Button onClick={submit}>Post</Button></DialogFooter>
+        <DialogFooter>
+          <Button onClick={submit}>Post</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

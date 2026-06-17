@@ -26,7 +26,7 @@ function Analytics() {
   const { can } = usePermissions();
   // canView gates the data queries — must match the same permission as the route guard
   const canView = isAdmin || roles.includes("manager") || roles.includes("team_leader") || can("reports.dashboards");
-  const [from, setFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - 29); return d.toISOString().slice(0, 10); });
+  const [from, setFrom] = useState(() => new Date().toISOString().slice(0, 10));
   const [to, setTo] = useState(() => new Date().toISOString().slice(0, 10));
 
   const lb = useQuery({
@@ -65,10 +65,15 @@ function Analytics() {
   return (
     <div className="max-w-6xl mx-auto space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <h1 className="text-2xl font-semibold flex items-center gap-2"><BarChart3 className="h-6 w-6" /> Workforce Analytics</h1>
+        <h1 className="text-2xl font-semibold flex items-center gap-2">
+          <BarChart3 className="h-6 w-6" /> Workforce Analytics
+        </h1>
         <DateRangePicker
           value={{ from, to }}
-          onChange={(v) => { setFrom(v.from); setTo(v.to); }}
+          onChange={(v) => {
+            setFrom(v.from);
+            setTo(v.to);
+          }}
           align="end"
         />
       </div>
@@ -84,23 +89,34 @@ function Analytics() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Top Agents by Net Revenue</CardTitle>
-              <Button variant="outline" size="sm" onClick={() => downloadCSV(`leaderboard-${from}_to_${to}.csv`, toCSV(lb.data as any))}><Download className="h-4 w-4 mr-1" /> Export</Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => downloadCSV(`leaderboard-${from}_to_${to}.csv`, toCSV(lb.data as any))}
+              >
+                <Download className="h-4 w-4 mr-1" /> Export
+              </Button>
             </CardHeader>
             <CardContent>
               <Table>
-                <TableHeader><TableRow>
-                  <TableHead>#</TableHead><TableHead>Agent</TableHead>
-                  <TableHead className="text-right">Sales</TableHead>
-                  <TableHead className="text-right">Gross</TableHead>
-                  <TableHead className="text-right">Refunds</TableHead>
-                  <TableHead className="text-right">Chargebacks</TableHead>
-                  <TableHead className="text-right">Net</TableHead>
-                </TableRow></TableHeader>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>#</TableHead>
+                    <TableHead>Agent</TableHead>
+                    <TableHead className="text-right">Sales</TableHead>
+                    <TableHead className="text-right">Gross</TableHead>
+                    <TableHead className="text-right">Refunds</TableHead>
+                    <TableHead className="text-right">Chargebacks</TableHead>
+                    <TableHead className="text-right">Net</TableHead>
+                  </TableRow>
+                </TableHeader>
                 <TableBody>
                   {(lb.data ?? []).map((r: any, i: number) => (
                     <TableRow key={r.employee_id}>
                       <TableCell>{i + 1}</TableCell>
-                      <TableCell>{r.full_name} <span className="text-xs text-muted-foreground">{r.employee_code}</span></TableCell>
+                      <TableCell>
+                        {r.full_name} <span className="text-xs text-muted-foreground">{r.employee_code}</span>
+                      </TableCell>
                       <TableCell className="text-right">{r.sales_count}</TableCell>
                       <TableCell className="text-right">{fmtUSD(r.gross_revenue)}</TableCell>
                       <TableCell className="text-right">{fmtUSD(r.refunds)}</TableCell>
@@ -118,16 +134,24 @@ function Analytics() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Sales Source Performance</CardTitle>
-              <Button variant="outline" size="sm" onClick={() => downloadCSV(`sources-${from}_to_${to}.csv`, toCSV(src.data as any))}><Download className="h-4 w-4 mr-1" /> Export</Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => downloadCSV(`sources-${from}_to_${to}.csv`, toCSV(src.data as any))}
+              >
+                <Download className="h-4 w-4 mr-1" /> Export
+              </Button>
             </CardHeader>
             <CardContent>
               <Table>
-                <TableHeader><TableRow>
-                  <TableHead>Source</TableHead>
-                  <TableHead className="text-right">Sales</TableHead>
-                  <TableHead className="text-right">Gross</TableHead>
-                  <TableHead className="text-right">Net</TableHead>
-                </TableRow></TableHeader>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Source</TableHead>
+                    <TableHead className="text-right">Sales</TableHead>
+                    <TableHead className="text-right">Gross</TableHead>
+                    <TableHead className="text-right">Net</TableHead>
+                  </TableRow>
+                </TableHeader>
                 <TableBody>
                   {(src.data ?? []).map((r: any) => (
                     <TableRow key={r.source_id}>
@@ -147,19 +171,27 @@ function Analytics() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Centre Comparison (DBP vs ITP)</CardTitle>
-              <Button variant="outline" size="sm" onClick={() => downloadCSV(`centres-${from}_to_${to}.csv`, toCSV(centres.data as any))}><Download className="h-4 w-4 mr-1" /> Export</Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => downloadCSV(`centres-${from}_to_${to}.csv`, toCSV(centres.data as any))}
+              >
+                <Download className="h-4 w-4 mr-1" /> Export
+              </Button>
             </CardHeader>
             <CardContent>
               <Table>
-                <TableHeader><TableRow>
-                  <TableHead>Centre</TableHead>
-                  <TableHead className="text-right">Present days</TableHead>
-                  <TableHead className="text-right">Sales</TableHead>
-                  <TableHead className="text-right">Gross</TableHead>
-                  <TableHead className="text-right">Refunds</TableHead>
-                  <TableHead className="text-right">Chargebacks</TableHead>
-                  <TableHead className="text-right">Net</TableHead>
-                </TableRow></TableHeader>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Centre</TableHead>
+                    <TableHead className="text-right">Present days</TableHead>
+                    <TableHead className="text-right">Sales</TableHead>
+                    <TableHead className="text-right">Gross</TableHead>
+                    <TableHead className="text-right">Refunds</TableHead>
+                    <TableHead className="text-right">Chargebacks</TableHead>
+                    <TableHead className="text-right">Net</TableHead>
+                  </TableRow>
+                </TableHeader>
                 <TableBody>
                   {(centres.data ?? []).map((r: any) => (
                     <TableRow key={r.centre_id}>

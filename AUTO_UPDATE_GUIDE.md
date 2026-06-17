@@ -234,6 +234,55 @@ pub fn run() {
 }
 ```
 
+### 4. Dynamic Web Download Links (Portal Login Page)
+
+Because the Tauri desktop wrapper loads your remote website in a webview, it's critical that the web portal's login page serves the actual, latest compiled release files for users who need to install the desktop client for the first time. 
+
+Rather than committing static files like `public/JD_Connect.exe` to git and manually updating/committing them for every single release, the download links in the web application dynamically query the GitHub Release API on mount.
+
+In [auth.tsx](file:///c:/Users/Administrator/Desktop/JD%20Connect/src/routes/auth.tsx), we handle this inside a React hook:
+
+```typescript
+const [downloadUrls, setDownloadUrls] = useState({
+  win: "https://github.com/KashishKami/jd_connect/releases/latest",
+  mac: "https://github.com/KashishKami/jd_connect/releases/latest",
+});
+
+useEffect(() => {
+  fetch("https://api.github.com/repos/KashishKami/jd_connect/releases/latest")
+    .then((res) => res.json())
+    .then((data) => {
+      if (data && data.assets) {
+        // Find the direct download links for the built installer assets
+        const winAsset = data.assets.find((asset: any) => asset.name.endsWith(".exe"));
+        const macAsset = data.assets.find((asset: any) => asset.name.endsWith(".dmg"));
+        setDownloadUrls({
+          win: winAsset?.browser_download_url || "https://github.com/KashishKami/jd_connect/releases/latest",
+          mac: macAsset?.browser_download_url || "https://github.com/KashishKami/jd_connect/releases/latest",
+        });
+      }
+    })
+    .catch((err) => {
+      console.error("Failed to fetch latest release assets:", err);
+    });
+}, []);
+```
+
+In the JSX, the download anchors are bound directly:
+
+```tsx
+<a href={downloadUrls.win} target="_blank" rel="noopener noreferrer">
+  Windows
+</a>
+<a href={downloadUrls.mac} target="_blank" rel="noopener noreferrer">
+  macOS
+</a>
+```
+
+This ensures:
+* **Immediate Delivery**: Users downloading the installer on the login page always receive the latest release binary.
+* **Fallback Safety**: If the GitHub API is rate-limited or fails, the link falls back to the latest releases page (`https://github.com/KashishKami/jd_connect/releases/latest`), where users can manually select their download.
+
 ---
 
 ## The GitHub Actions Workflow

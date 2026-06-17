@@ -117,8 +117,8 @@ function fmtLabel(value: DateRangeValue) {
   try {
     const f = parseISO(value.from);
     const t = parseISO(value.to);
-    if (value.from === value.to) return format(f, "MMM d, yyyy");
-    return `${format(f, "MMM d, yyyy")} – ${format(t, "MMM d, yyyy")}`;
+    if (value.from === value.to) return format(f, "dd-MMM-yyyy");
+    return `${format(f, "dd-MMM-yyyy")} – ${format(t, "dd-MMM-yyyy")}`;
   } catch {
     return `${value.from} – ${value.to}`;
   }

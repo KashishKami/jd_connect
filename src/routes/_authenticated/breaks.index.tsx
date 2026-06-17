@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Coffee, Square, Activity } from "lucide-react";
+import { formatDateTime } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/breaks/")({
   head: () => ({ meta: [{ title: "My Breaks — JD Connect" }] }),
@@ -310,8 +311,8 @@ function MyBreaks() {
                   {history.map((b) => (
                     <TableRow key={b.id}>
                       <TableCell>{b.break_type?.name ?? "—"}</TableCell>
-                      <TableCell>{new Date(b.start_at).toLocaleString()}</TableCell>
-                      <TableCell>{b.end_at ? new Date(b.end_at).toLocaleString() : "—"}</TableCell>
+                      <TableCell>{formatDateTime(b.start_at)}</TableCell>
+                      <TableCell>{b.end_at ? formatDateTime(b.end_at) : "—"}</TableCell>
                       <TableCell>{b.duration_minutes ? `${b.duration_minutes} min` : (b.status === "active" ? `${elapsedMin(b.start_at)} min` : "—")}</TableCell>
                       <TableCell>{b.limit_minutes ?? "—"}</TableCell>
                       <TableCell>{statusBadge(b.status)}</TableCell>
@@ -340,7 +341,7 @@ function MyBreaks() {
                       <TableCell>{r.requested_minutes}</TableCell>
                       <TableCell className="max-w-xs truncate">{r.reason}</TableCell>
                       <TableCell><Badge variant="outline">{r.status}</Badge></TableCell>
-                      <TableCell>{new Date(r.created_at).toLocaleString()}</TableCell>
+                      <TableCell>{formatDateTime(r.created_at)}</TableCell>
                     </TableRow>
                   ))}
                   {myReqs.length === 0 && (

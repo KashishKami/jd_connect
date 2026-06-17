@@ -2992,83 +2992,50 @@ export type Database = {
           sales_count: number
         }[]
       }
-      update_self_profile:
-        | {
-            Args: { _mobile?: string; _profile_photo_url?: string }
-            Returns: {
-              alias_name: string | null
-              approval_status: string
-              auth_user_id: string | null
-              centre_id: string | null
-              created_at: string
-              department_id: string | null
-              designation: string | null
-              email: string
-              employee_code: string
-              employment_status: Database["public"]["Enums"]["employment_status"]
-              full_name: string
-              id: string
-              joining_date: string | null
-              manager_id: string | null
-              mobile: string | null
-              profile_completed: boolean
-              profile_photo_url: string | null
-              role_id: string | null
-              shift_id: string | null
-              team_leader_id: string | null
-              updated_at: string
-              username: string
-            }
-            SetofOptions: {
-              from: "*"
-              to: "employees"
-              isOneToOne: true
-              isSetofReturn: false
-            }
-          }
-        | {
-            Args: {
-              _alias_name?: string
-              _centre_id?: string
-              _department_id?: string
-              _joining_date?: string
-              _manager_id?: string
-              _mobile?: string
-              _profile_photo_url?: string
-              _shift_id?: string
-              _team_leader_id?: string
-            }
-            Returns: {
-              alias_name: string | null
-              approval_status: string
-              auth_user_id: string | null
-              centre_id: string | null
-              created_at: string
-              department_id: string | null
-              designation: string | null
-              email: string
-              employee_code: string
-              employment_status: Database["public"]["Enums"]["employment_status"]
-              full_name: string
-              id: string
-              joining_date: string | null
-              manager_id: string | null
-              mobile: string | null
-              profile_completed: boolean
-              profile_photo_url: string | null
-              role_id: string | null
-              shift_id: string | null
-              team_leader_id: string | null
-              updated_at: string
-              username: string
-            }
-            SetofOptions: {
-              from: "*"
-              to: "employees"
-              isOneToOne: true
-              isSetofReturn: false
-            }
-          }
+      update_self_profile: {
+        Args: {
+          _alias_name?: string
+          _centre_id?: string
+          _department_id?: string
+          _designation?: string
+          _joining_date?: string
+          _manager_id?: string
+          _mobile?: string
+          _profile_photo_url?: string
+          _shift_id?: string
+          _team_leader_id?: string
+        }
+        Returns: {
+          alias_name: string | null
+          approval_status: string
+          auth_user_id: string | null
+          centre_id: string | null
+          created_at: string
+          department_id: string | null
+          designation: string | null
+          email: string
+          employee_code: string
+          employment_status: Database["public"]["Enums"]["employment_status"]
+          full_name: string
+          id: string
+          joining_date: string | null
+          manager_id: string | null
+          mobile: string | null
+          profile_completed: boolean
+          profile_photo_url: string | null
+          role_id: string | null
+          shift_id: string | null
+          team_leader_id: string | null
+          updated_at: string
+          username: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "employees"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       workforce_monitor: {
         Args: never
         Returns: {

@@ -20,9 +20,17 @@ export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
       { title: "Sign in — JD Connect" },
-      { name: "description", content: "Sign in to the JD Connect employee portal to manage your profile, attendance, sales and team communication." },
+      {
+        name: "description",
+        content:
+          "Sign in to the JD Connect employee portal to manage your profile, attendance, sales and team communication.",
+      },
       { property: "og:title", content: "Sign in — JD Connect" },
-      { property: "og:description", content: "Sign in to the JD Connect employee portal to manage your profile, attendance, sales and team communication." },
+      {
+        property: "og:description",
+        content:
+          "Sign in to the JD Connect employee portal to manage your profile, attendance, sales and team communication.",
+      },
     ],
   }),
   component: AuthPage,
@@ -184,7 +192,9 @@ function AuthPage() {
   const handleSendReset = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const email = String(fd.get("email") ?? "").trim().toLowerCase();
+    const email = String(fd.get("email") ?? "")
+      .trim()
+      .toLowerCase();
     if (!email) return toast.error("Enter your email");
     setLoading(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
@@ -259,9 +269,12 @@ function AuthPage() {
   const handleResendCode = async (type: "signup" | "recovery") => {
     if (!pendingEmail) return;
     setLoading(true);
-    const { error } = type === "recovery"
-      ? await supabase.auth.resetPasswordForEmail(pendingEmail, { redirectTo: `${window.location.origin}/reset-password` })
-      : await supabase.auth.resend({ type: "signup", email: pendingEmail });
+    const { error } =
+      type === "recovery"
+        ? await supabase.auth.resetPasswordForEmail(pendingEmail, {
+            redirectTo: `${window.location.origin}/reset-password`,
+          })
+        : await supabase.auth.resend({ type: "signup", email: pendingEmail });
     setLoading(false);
     if (error) toast.error(error.message);
     else toast.success("Code resent");
@@ -270,151 +283,215 @@ function AuthPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary via-primary to-sidebar p-4">
       <div className="w-full max-w-md flex flex-col gap-3">
-      <Card className="w-full shadow-2xl">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-2 h-12 w-12 rounded-xl bg-primary text-primary-foreground grid place-items-center text-xl font-bold">JD</div>
-          <CardTitle className="text-2xl">JD Connect</CardTitle>
-          <CardDescription>Employee Portal</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {step === "reset-request" ? (
-            <form onSubmit={handleSendReset} className="space-y-4">
-              <p className="text-sm text-muted-foreground">Enter your email and we'll send you a 6-digit code to reset your password.</p>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" name="email" type="email" required />
-              </div>
-              <Button type="submit" className="w-full" disabled={loading}>Send code</Button>
-              <Button type="button" variant="ghost" className="w-full" onClick={() => setStep("auth")}>Back to sign in</Button>
-            </form>
-          ) : step === "verify-signup" || step === "verify-recovery" ? (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground text-center">
-                Enter the 6-digit code sent to<br /><span className="font-medium text-foreground">{pendingEmail}</span>
-              </p>
-              <div className="flex justify-center">
-                <InputOTP maxLength={6} value={otp} onChange={setOtp}>
-                  <InputOTPGroup>
-                    {[0,1,2,3,4,5].map((i) => <InputOTPSlot key={i} index={i} />)}
-                  </InputOTPGroup>
-                </InputOTP>
-              </div>
-              <Button
-                className="w-full"
-                disabled={loading || otp.length !== 6}
-                onClick={step === "verify-signup" ? handleVerifySignup : handleVerifyRecovery}
-              >Verify</Button>
-              <div className="flex justify-between text-xs">
-                <button type="button" className="text-muted-foreground hover:text-primary" onClick={() => handleResendCode(step === "verify-signup" ? "signup" : "recovery")} disabled={loading}>Resend code</button>
-                <button type="button" className="text-muted-foreground hover:text-primary" onClick={() => setStep("auth")}>Cancel</button>
-              </div>
+        <Card className="w-full shadow-2xl">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-2 h-12 w-12 rounded-xl bg-primary text-primary-foreground grid place-items-center text-xl font-bold">
+              JD
             </div>
-          ) : step === "reset-password" ? (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">Set a new password for <span className="font-medium text-foreground">{pendingEmail}</span></p>
-              <div className="space-y-2">
-                <Label htmlFor="new_password">New password</Label>
-                <PasswordInput id="new_password" minLength={8} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
-              </div>
-              <Button className="w-full" disabled={loading} onClick={handleSetNewPassword}>Update password</Button>
-            </div>
-          ) : (
-            <Tabs defaultValue="login">
-              <TabsList className="grid grid-cols-2 w-full">
-                <TabsTrigger value="login">Sign in</TabsTrigger>
-                <TabsTrigger value="signup">Create account</TabsTrigger>
-              </TabsList>
-              <TabsContent value="login">
-                <form onSubmit={handleLogin} className="space-y-4 mt-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="identifier">Employee ID or Email</Label>
-                    <Input id="identifier" name="identifier" placeholder="JD0001 or you@example.com" required autoFocus />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="password">Password</Label>
-                    <PasswordInput id="password" name="password" required />
-                  </div>
-                  <Button type="submit" className="w-full" disabled={loading}>Sign in</Button>
-                  <button type="button" onClick={() => setStep("reset-request")} className="text-sm text-muted-foreground hover:text-primary w-full text-center">
-                    Forgot password?
+            <CardTitle className="text-2xl">JD Connect</CardTitle>
+            <CardDescription>Employee Portal</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {step === "reset-request" ? (
+              <form onSubmit={handleSendReset} className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Enter your email and we'll send you a 6-digit code to reset your password.
+                </p>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input id="email" name="email" type="email" required />
+                </div>
+                <Button type="submit" className="w-full" disabled={loading}>
+                  Send code
+                </Button>
+                <Button type="button" variant="ghost" className="w-full" onClick={() => setStep("auth")}>
+                  Back to sign in
+                </Button>
+              </form>
+            ) : step === "verify-signup" || step === "verify-recovery" ? (
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground text-center">
+                  Enter the 6-digit code sent to
+                  <br />
+                  <span className="font-medium text-foreground">{pendingEmail}</span>
+                </p>
+                <div className="flex justify-center">
+                  <InputOTP maxLength={6} value={otp} onChange={setOtp}>
+                    <InputOTPGroup>
+                      {[0, 1, 2, 3, 4, 5].map((i) => (
+                        <InputOTPSlot key={i} index={i} />
+                      ))}
+                    </InputOTPGroup>
+                  </InputOTP>
+                </div>
+                <Button
+                  className="w-full"
+                  disabled={loading || otp.length !== 6}
+                  onClick={step === "verify-signup" ? handleVerifySignup : handleVerifyRecovery}
+                >
+                  Verify
+                </Button>
+                <div className="flex justify-between text-xs">
+                  <button
+                    type="button"
+                    className="text-muted-foreground hover:text-primary"
+                    onClick={() => handleResendCode(step === "verify-signup" ? "signup" : "recovery")}
+                    disabled={loading}
+                  >
+                    Resend code
                   </button>
-                </form>
-              </TabsContent>
-              <TabsContent value="signup">
-                <form onSubmit={handleSignup} className="space-y-4 mt-4">
-                  <p className="text-xs text-muted-foreground">
-                    Use your <span className="font-medium text-foreground">@{ALLOWED_DOMAIN}</span> email. Other domains can sign up but require Super Admin approval before access.
-                  </p>
-                  <div className="space-y-2">
-                    <Label htmlFor="full_name">Real Full Name</Label>
-                    <Input id="full_name" name="full_name" required placeholder="As on your ID / official records" />
-                    <p className="text-xs text-muted-foreground">Your legal name — used for HR and payroll.</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="alias_name">Alias Name</Label>
-                    <Input id="alias_name" name="alias_name" required placeholder="The name you use on calls / with customers" />
-                    <p className="text-xs text-muted-foreground">Shown to teammates and customers. Must be different from your real name.</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup_email">Email</Label>
-                    <Input id="signup_email" name="email" type="email" required placeholder={`you@${ALLOWED_DOMAIN}`} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signup_password">Password</Label>
-                    <PasswordInput id="signup_password" name="password" required minLength={8} />
-                  </div>
-                  <Button type="submit" className="w-full" disabled={loading}>Create account</Button>
-                </form>
-              </TabsContent>
-            </Tabs>
-          )}
-        </CardContent>
-      </Card>
-      <div className="rounded-xl bg-white/10 backdrop-blur border border-white/20 p-4 space-y-3">
-        <div className="flex items-center justify-center gap-2 text-white text-sm font-medium">
-          <Download className="h-4 w-4" />
-          Download the desktop app
+                  <button
+                    type="button"
+                    className="text-muted-foreground hover:text-primary"
+                    onClick={() => setStep("auth")}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : step === "reset-password" ? (
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Set a new password for <span className="font-medium text-foreground">{pendingEmail}</span>
+                </p>
+                <div className="space-y-2">
+                  <Label htmlFor="new_password">New password</Label>
+                  <PasswordInput
+                    id="new_password"
+                    minLength={8}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                  />
+                </div>
+                <Button className="w-full" disabled={loading} onClick={handleSetNewPassword}>
+                  Update password
+                </Button>
+              </div>
+            ) : (
+              <Tabs defaultValue="login">
+                <TabsList className="grid grid-cols-2 w-full">
+                  <TabsTrigger value="login">Sign in</TabsTrigger>
+                  <TabsTrigger value="signup">Create account</TabsTrigger>
+                </TabsList>
+                <TabsContent value="login">
+                  <form onSubmit={handleLogin} className="space-y-4 mt-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="identifier">Employee ID or Email</Label>
+                      <Input
+                        id="identifier"
+                        name="identifier"
+                        placeholder="JD0001 or you@example.com"
+                        required
+                        autoFocus
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="password">Password</Label>
+                      <PasswordInput id="password" name="password" required />
+                    </div>
+                    <Button type="submit" className="w-full" disabled={loading}>
+                      Sign in
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => setStep("reset-request")}
+                      className="text-sm text-muted-foreground hover:text-primary w-full text-center"
+                    >
+                      Forgot password?
+                    </button>
+                  </form>
+                </TabsContent>
+                <TabsContent value="signup">
+                  <form onSubmit={handleSignup} className="space-y-4 mt-4">
+                    <p className="text-xs text-muted-foreground">
+                      Use your <span className="font-medium text-foreground">@{ALLOWED_DOMAIN}</span> email. Other
+                      domains can sign up but require Super Admin approval before access.
+                    </p>
+                    <div className="space-y-2">
+                      <Label htmlFor="full_name">Real Full Name</Label>
+                      <Input id="full_name" name="full_name" required placeholder="As on your ID / official records" />
+                      <p className="text-xs text-muted-foreground">Your legal name — used for HR and payroll.</p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="alias_name">Alias Name</Label>
+                      <Input
+                        id="alias_name"
+                        name="alias_name"
+                        required
+                        placeholder="The name you use on calls / with customers"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Shown to teammates and customers. Must be different from your real name.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="signup_email">Email</Label>
+                      <Input
+                        id="signup_email"
+                        name="email"
+                        type="email"
+                        required
+                        placeholder={`you@${ALLOWED_DOMAIN}`}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="signup_password">Password</Label>
+                      <PasswordInput id="signup_password" name="password" required minLength={8} />
+                    </div>
+                    <Button type="submit" className="w-full" disabled={loading}>
+                      Create account
+                    </Button>
+                  </form>
+                </TabsContent>
+              </Tabs>
+            )}
+          </CardContent>
+        </Card>
+        <div className="rounded-xl bg-white/10 backdrop-blur border border-white/20 p-4 space-y-3">
+          <div className="flex items-center justify-center gap-2 text-white text-sm font-medium">
+            <Download className="h-4 w-4" />
+            Download the desktop app
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => {
+                if (downloadUrls.win.endsWith(".exe")) {
+                  window.location.href = downloadUrls.win;
+                } else {
+                  window.open(downloadUrls.win, "_blank", "noopener,noreferrer");
+                }
+              }}
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-white text-slate-900 hover:bg-white/90 px-3 py-2 text-sm font-medium transition-colors cursor-pointer"
+            >
+              <Monitor className="h-4 w-4" />
+              Windows
+            </button>
+            <button
+              onClick={() => {
+                if (downloadUrls.mac.endsWith(".dmg")) {
+                  window.location.href = downloadUrls.mac;
+                } else {
+                  window.open(downloadUrls.mac, "_blank", "noopener,noreferrer");
+                }
+              }}
+              className="inline-flex items-center justify-center gap-2 rounded-md bg-white text-slate-900 hover:bg-white/90 px-3 py-2 text-sm font-medium transition-colors cursor-pointer"
+            >
+              <Apple className="h-4 w-4" />
+              macOS
+            </button>
+          </div>
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            onClick={() => {
-              if (downloadUrls.win.endsWith(".exe")) {
-                window.location.href = downloadUrls.win;
-              } else {
-                window.open(downloadUrls.win, "_blank", "noopener,noreferrer");
-              }
-            }}
-            className="inline-flex items-center justify-center gap-2 rounded-md bg-white text-slate-900 hover:bg-white/90 px-3 py-2 text-sm font-medium transition-colors cursor-pointer"
+        <p className="text-center text-xs text-white/80">
+          Design &amp; Develop by{" "}
+          <a
+            href="https://www.amitsrivastav.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-white font-medium hover:underline"
           >
-            <Monitor className="h-4 w-4" />
-            Windows
-          </button>
-          <button
-            onClick={() => {
-              if (downloadUrls.mac.endsWith(".dmg")) {
-                window.location.href = downloadUrls.mac;
-              } else {
-                window.open(downloadUrls.mac, "_blank", "noopener,noreferrer");
-              }
-            }}
-            className="inline-flex items-center justify-center gap-2 rounded-md bg-white text-slate-900 hover:bg-white/90 px-3 py-2 text-sm font-medium transition-colors cursor-pointer"
-          >
-            <Apple className="h-4 w-4" />
-            macOS
-          </button>
-        </div>
-      </div>
-      <p className="text-center text-xs text-white/80">
-        Design &amp; Develop by{" "}
-        <a
-          href="https://www.amitsrivastav.com"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-white font-medium hover:underline"
-        >
-          Amit Srivastav
-        </a>
-      </p>
+            Amit Srivastav
+          </a>
+        </p>
       </div>
     </div>
   );
