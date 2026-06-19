@@ -394,6 +394,7 @@ function ChannelThread({ channelId }: { channelId: string }) {
       void qc.invalidateQueries({ queryKey: ["notifications"] });
       void qc.invalidateQueries({ queryKey: ["channels"] });
       void qc.invalidateQueries({ queryKey: ["channel-unread-counts"] });
+      void qc.invalidateQueries({ queryKey: ["comm-unread"] });
     });
   }, [channelId, employee?.id, messages.length, qc, membership]);
 

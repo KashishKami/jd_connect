@@ -103,7 +103,11 @@ export function useCommUnread(): CommUnread {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "announcements" }, () => {
         qc.invalidateQueries({ queryKey: ["comm-unread", empId] });
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "CHANNEL_ERROR") {
+          console.error("useCommUnread subscription error for channel");
+        }
+      });
     return () => { supabase.removeChannel(ch); };
   }, [empId, qc]);
 

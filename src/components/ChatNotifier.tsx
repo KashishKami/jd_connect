@@ -9,18 +9,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Hash, MessageSquare, X } from "lucide-react";
 // Tauri notification plugin is optional (desktop only). Load dynamically
 // so the web build doesn't fail when the package isn't installed.
-async function loadTauriNotification(): Promise<{
-  isPermissionGranted: () => Promise<boolean>;
-  requestPermission: () => Promise<string>;
-  sendNotification: (opts: { title: string; body: string }) => void;
-} | null> {
-  try {
-    // @ts-expect-error optional desktop-only module
-    return await import(/* @vite-ignore */ "@tauri-apps/plugin-notification");
-  } catch {
-    return null;
-  }
-}
+
 
 type Incoming = {
   kind: "direct" | "channel";
@@ -121,12 +110,10 @@ export function ChatNotifier() {
       const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
       if (isTauri) {
         try {
-          const tauri = await loadTauriNotification();
-          if (!tauri) return;
-          let hasPerm = await tauri.isPermissionGranted();
+          const { requestPermission, isPermissionGranted } = await import("@tauri-apps/plugin-notification");
+          let hasPerm = await isPermissionGranted();
           if (!hasPerm) {
-            const permission = await tauri.requestPermission();
-            hasPerm = permission === "granted";
+            await requestPermission();
           }
         } catch (err) {
           console.error("Failed to request Tauri notification permission", err);
@@ -139,6 +126,47 @@ export function ChatNotifier() {
     };
     void requestPerms();
   }, []);
+
+  // Listen for native Tauri notification clicks
+  useEffect(() => {
+    const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+    if (!isTauri) return;
+
+    let active = true;
+    let unlistenFn: (() => void) | undefined;
+
+    const setup = async () => {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        if (!active) return;
+        const unlisten = await listen(
+          "notification-clicked",
+          (event: { payload: { kind: string; target_id: string } }) => {
+            const { kind, target_id } = event.payload;
+            window.focus();
+            if (kind === "direct") {
+              void navigate({ to: "/chat/$conversationId", params: { conversationId: target_id } });
+            } else if (kind === "channel") {
+              void navigate({ to: "/channels/$channelId", params: { channelId: target_id } });
+            }
+          }
+        );
+        if (!active) {
+          unlisten();
+        } else {
+          unlistenFn = unlisten;
+        }
+      } catch (err) {
+        console.error("Failed to setup Tauri notification click listener", err);
+      }
+    };
+    setup();
+
+    return () => {
+      active = false;
+      if (unlistenFn) unlistenFn();
+    };
+  }, [navigate]);
 
   useEffect(() => {
     if (!employee?.id) return;
@@ -188,7 +216,8 @@ export function ChatNotifier() {
           at: m.created_at,
         };
 
-        void qc.invalidateQueries({ queryKey: ["notifications"] });
+         void qc.invalidateQueries({ queryKey: ["notifications"] });
+        void qc.invalidateQueries({ queryKey: ["comm-unread"] });
         if (incoming.kind === "direct") {
           void qc.invalidateQueries({ queryKey: ["messages", incoming.targetId] });
           void qc.invalidateQueries({ queryKey: ["conversations"] });
@@ -203,23 +232,23 @@ export function ChatNotifier() {
           const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
           if (isTauri) {
             try {
-              const tauri = await loadTauriNotification();
-              if (!tauri) return;
-              let hasPerm = await tauri.isPermissionGranted();
-              if (!hasPerm) {
-                const permission = await tauri.requestPermission();
-                hasPerm = permission === "granted";
-              }
-              if (hasPerm) {
-                tauri.sendNotification({
+              const { invoke } = await import("@tauri-apps/api/core");
+              await invoke("send_native_notification", {
+                payload: {
                   title: incoming.title,
                   body: incoming.body,
-                });
-              }
+                  kind: incoming.kind,
+                  target_id: incoming.targetId,
+                },
+              });
+              return;
             } catch (err) {
-              console.error("Failed to send Tauri notification", err);
+              console.error("Failed to send native Tauri notification, falling back to browser Notification", err);
             }
-          } else if (
+          }
+
+          // Fallback to Web Notification API
+          if (
             typeof window !== "undefined" &&
             "Notification" in window &&
             Notification.permission === "granted"

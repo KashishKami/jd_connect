@@ -1,6 +1,57 @@
 use tauri_plugin_updater::UpdaterExt;
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_dialog::{MessageDialogKind, MessageDialogButtons};
+use tauri::Emitter;
+
+#[derive(serde::Deserialize, serde::Serialize, Clone)]
+struct NativeNotificationPayload {
+  title: String,
+  body: String,
+  kind: String,
+  target_id: String,
+}
+
+#[tauri::command]
+fn send_native_notification(app: tauri::AppHandle, payload: NativeNotificationPayload) -> Result<(), String> {
+  let payload_clone = payload.clone();
+  std::thread::spawn(move || {
+    let mut notification = notify_rust::Notification::new();
+    notification
+      .summary(&payload.title)
+      .body(&payload.body);
+
+    #[cfg(target_os = "windows")]
+    {
+      if !cfg!(debug_assertions) {
+        notification.app_id("in.jdconnect.desktop");
+      }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+      if cfg!(debug_assertions) {
+        notification.set_application("com.apple.Terminal");
+      } else {
+        notification.set_application("in.jdconnect.desktop");
+      }
+    }
+
+    match notification.show() {
+      Ok(handle) => {
+        let _ = handle.wait_for_response(move |response: &notify_rust::NotificationResponse| {
+          if matches!(response, notify_rust::NotificationResponse::Default) {
+            let _ = app.emit("notification-clicked", payload_clone);
+          }
+        });
+      }
+      Err(e) => {
+        eprintln!("Failed to show notification: {}", e);
+      }
+    }
+  });
+
+  Ok(())
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -9,6 +60,7 @@ pub fn run() {
     .plugin(tauri_plugin_dialog::init())
     .plugin(tauri_plugin_process::init())
     .plugin(tauri_plugin_notification::init())
+    .invoke_handler(tauri::generate_handler![send_native_notification])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(

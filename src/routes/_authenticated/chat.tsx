@@ -273,6 +273,7 @@ function ChatThread({ conversationId }: { conversationId: string }) {
       void qc.invalidateQueries({ queryKey: ["notifications"] });
       void qc.invalidateQueries({ queryKey: ["conversations"] });
       void qc.invalidateQueries({ queryKey: ["chat-message-meta"] });
+      void qc.invalidateQueries({ queryKey: ["comm-unread"] });
     });
   }, [conversationId, employee?.id, messages.length, qc]);
 

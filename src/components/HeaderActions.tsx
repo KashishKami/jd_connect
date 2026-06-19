@@ -63,12 +63,15 @@ export function HeaderActions() {
       await supabase.rpc("mark_conversation_read", { _conversation_id: n.link.replace("/chat/", "") });
       void qc.invalidateQueries({ queryKey: ["conversations"] });
       void qc.invalidateQueries({ queryKey: ["chat-message-meta"] });
+      void qc.invalidateQueries({ queryKey: ["comm-unread"] });
     } else if (n.link?.startsWith("/channels/")) {
       await supabase.rpc("mark_channel_read", { _channel_id: n.link.replace("/channels/", "") });
       void qc.invalidateQueries({ queryKey: ["channels"] });
       void qc.invalidateQueries({ queryKey: ["channel-unread-counts"] });
+      void qc.invalidateQueries({ queryKey: ["comm-unread"] });
     } else {
       await supabase.from("notifications").update({ is_read: true }).eq("id", n.id);
+      void qc.invalidateQueries({ queryKey: ["comm-unread"] });
     }
     qc.invalidateQueries({ queryKey: ["notifications"] });
   };

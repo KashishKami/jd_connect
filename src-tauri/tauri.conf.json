@@ -1,11 +1,11 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "JD Connect",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "identifier": "in.jdconnect.desktop",
   "build": {
     "frontendDist": "https://jdconnect.in",
-    "devUrl": "https://jdconnect.in",
+    "devUrl": "http://localhost:8080",
     "beforeDevCommand": "bun run dev",
     "beforeBuildCommand": "bun run build"
   },

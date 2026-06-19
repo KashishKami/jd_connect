@@ -4,7 +4,7 @@ import { zodValidator, fallback } from "@tanstack/zod-adapter";
 import { z } from "zod";
 import { ChatPage } from "./chat";
 import { ChannelsPage } from "./channels";
-import { AnnouncementsPage } from "./announcements";
+import { AnnouncementsPage } from "@/components/AnnouncementsPage";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { MessageSquare, Hash, Megaphone } from "lucide-react";
