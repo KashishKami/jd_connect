@@ -373,19 +373,19 @@ function ChatThread({ conversationId }: { conversationId: string }) {
   return (
     <>
       {/* Static header bar at the top */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-emerald-600/30 bg-emerald-500 dark:bg-emerald-600 text-white shadow-sm">
+      <div className="flex items-center justify-between px-4 py-3 border-b bg-card text-card-foreground shadow-sm">
         <div className="flex items-center gap-3 min-w-0">
-          <Avatar className="h-9 w-9 border border-white/20">
-            <AvatarFallback className="bg-white/20 text-white font-semibold">{initials(chatTitle)}</AvatarFallback>
+          <Avatar className="h-9 w-9 border">
+            <AvatarFallback className="bg-primary text-primary-foreground font-semibold">{initials(chatTitle)}</AvatarFallback>
           </Avatar>
           <div className="min-w-0">
-            <div className="text-sm font-semibold truncate text-white">{chatTitle}</div>
-            {chatSubtitle && <div className="text-xs text-emerald-100/90 truncate">{chatSubtitle}</div>}
+            <div className="text-sm font-semibold truncate">{chatTitle}</div>
+            {chatSubtitle && <div className="text-xs text-muted-foreground truncate">{chatSubtitle}</div>}
           </div>
         </div>
         <div className="flex items-center gap-2">
           {conversation?.type === "direct" && otherId && (
-            <Button variant="outline" size="sm" asChild className="gap-1.5 h-8 bg-white/10 hover:bg-white/20 text-white border border-white/60">
+            <Button variant="outline" size="sm" asChild className="gap-1.5 h-8">
               <Link to="/employees/$id" params={{ id: otherId }}>
                 <User className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">View Profile</span>
@@ -426,16 +426,15 @@ function ChatThread({ conversationId }: { conversationId: string }) {
         })}
         {messages.length === 0 && <p className="text-center text-sm text-muted-foreground py-10">Say hello 👋</p>}
       </div>
-      <div className="border-t border-emerald-600/30 p-3 flex gap-2 bg-emerald-500 dark:bg-emerald-600 shadow-inner">
+      <div className="border-t p-3 flex gap-2 bg-card shadow-inner">
         <MentionInput 
           value={body} 
           onChange={setBody} 
           onSubmit={send} 
           placeholder="Type a message… use @ to mention" 
           maxLength={4000} 
-          className="[&_.text-muted-foreground]:text-emerald-100/80 [&_button]:text-white/80 [&_button:hover]:text-white [&_span.text-\[10px\]]:text-emerald-100/80"
         />
-        <Button onClick={send} disabled={!body.trim()} className="bg-white hover:bg-white/90 text-emerald-600 dark:text-emerald-700"><Send className="h-4 w-4" /></Button>
+        <Button onClick={send} disabled={!body.trim()}><Send className="h-4 w-4" /></Button>
       </div>
     </>
   );

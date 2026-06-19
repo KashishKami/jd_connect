@@ -39,6 +39,7 @@ import {
   Lock,
   Users,
   MessageSquare,
+  Info,
 } from "lucide-react";
 import { toast } from "sonner";
 import { MentionInput, renderMessageBody } from "@/components/MentionInput";
@@ -323,7 +324,7 @@ function ChannelThread({ channelId }: { channelId: string }) {
   const { data: channelMeta } = useQuery({
     queryKey: ["ch-meta", channelId],
     queryFn: async () => {
-      const { data } = await supabase.from("channels").select("name, description").eq("id", channelId).maybeSingle();
+      const { data } = await supabase.from("channels").select("name, description, channel_type").eq("id", channelId).maybeSingle();
       return data;
     },
   });
@@ -449,6 +450,29 @@ function ChannelThread({ channelId }: { channelId: string }) {
   return (
     <div className="flex h-full">
       <div className="flex-1 flex flex-col min-w-0">
+        {/* Static header bar at the top */}
+        <div className="flex items-center justify-between px-4 py-3 border-b bg-card text-card-foreground shadow-sm">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="h-9 w-9 rounded-full bg-primary/10 text-primary grid place-items-center shrink-0 border border-primary/20">
+              <Hash className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-sm font-semibold truncate">#{channelMeta?.name ?? "Loading..."}</div>
+              {channelMeta?.description && (
+                <div className="text-xs text-muted-foreground truncate">{channelMeta.description}</div>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <ChannelDetailsDialog
+              channelId={channelId}
+              name={channelMeta?.name ?? ""}
+              description={channelMeta?.description ?? ""}
+              channelType={channelMeta?.channel_type}
+            />
+          </div>
+        </div>
+
         {pinned.length > 0 && (
           <div className="border-b bg-muted/30 p-2 text-xs space-y-1">
             {pinned.map((m) => (
@@ -458,40 +482,70 @@ function ChannelThread({ channelId }: { channelId: string }) {
             ))}
           </div>
         )}
-        <div ref={scrollRef} className="flex-1 overflow-auto p-4 space-y-3">
+        <div ref={scrollRef} className="flex-1 overflow-auto p-4 space-y-4 bg-[#eef2f6] dark:bg-[#0b0f17]">
           {messages.map((m) => {
             const mine = m.sender_id === employee?.id;
             return (
-              <div key={m.id} className="text-sm group">
-                <div className="flex items-baseline gap-2">
-                  <span className="font-medium">{(senders as Record<string, string>)[m.sender_id] ?? "—"}</span>
-                  <span className="text-[10px] text-muted-foreground">{formatDateTime(m.created_at)}</span>
-                  {m.is_pinned && <Pin className="h-3 w-3 text-primary" />}
-                  {(mine || canModerate) && (
-                    <button
-                      onClick={() => togglePin(m)}
-                      className="opacity-0 group-hover:opacity-100 text-[10px] text-muted-foreground"
-                    >
-                      {m.is_pinned ? "Unpin" : "Pin"}
-                    </button>
+              <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+                <div className="flex flex-col max-w-[75%]">
+                  {!mine && (
+                    <div className="text-[11px] text-muted-foreground mb-1 px-1 flex items-center gap-2">
+                      <span className="font-semibold text-foreground/80">{(senders as Record<string, string>)[m.sender_id] ?? "—"}</span>
+                      <span>{new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                    </div>
                   )}
-                  <button
-                    onClick={() => setThreadParentId(m.id)}
-                    className="opacity-0 group-hover:opacity-100 text-[10px] text-muted-foreground inline-flex items-center gap-0.5"
-                  >
-                    <MessageSquare className="h-3 w-3" />
-                    Reply
-                  </button>
+                  {mine && (
+                    <div className="text-[11px] text-muted-foreground mb-1 px-1 flex items-center justify-end gap-2">
+                      <span>{new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                    </div>
+                  )}
+                  
+                  <div className={`group relative rounded-2xl py-2 px-3 text-sm shadow-sm border ${
+                    mine
+                      ? "bg-primary text-primary-foreground border-primary/20 rounded-tr-none"
+                      : "bg-card text-card-foreground border-border/50 rounded-tl-none"
+                  }`}>
+                    <div className="leading-relaxed break-words">{renderMessageBody(m.body)}</div>
+                    <AttachmentList attachments={(m.attachments ?? []) as ChatAttachment[]} />
+                    <MessageReactions messageId={m.id} />
+                    
+                    {/* Hover Actions Bar */}
+                    <div className={`absolute top-0 -translate-y-1/2 flex items-center gap-1.5 bg-background border shadow-sm px-1.5 py-0.5 rounded-full z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-150 ${
+                      mine ? "left-2" : "right-2"
+                    }`}>
+                      {(mine || canModerate) && (
+                        <>
+                          <button
+                            onClick={() => togglePin(m)}
+                            className="text-[10px] text-muted-foreground hover:text-foreground font-medium cursor-pointer"
+                          >
+                            {m.is_pinned ? "Unpin" : "Pin"}
+                          </button>
+                          <span className="text-muted-foreground/30 text-[10px]">|</span>
+                        </>
+                      )}
+                      <button
+                        onClick={() => setThreadParentId(m.id)}
+                        className="text-[10px] text-muted-foreground hover:text-foreground font-medium inline-flex items-center gap-0.5 cursor-pointer"
+                      >
+                        <MessageSquare className="h-3 w-3" />
+                        Reply
+                      </button>
+                    </div>
+
+                    {m.is_pinned && (
+                      <div className={`absolute -bottom-1.5 ${mine ? "-left-1.5" : "-right-1.5"} bg-background border rounded-full p-0.5 shadow-sm`}>
+                        <Pin className="h-3 w-3 text-primary fill-primary" />
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="whitespace-pre-wrap">{renderMessageBody(m.body)}</div>
-                <AttachmentList attachments={(m.attachments ?? []) as ChatAttachment[]} />
-                <MessageReactions messageId={m.id} />
               </div>
             );
           })}
           {messages.length === 0 && <p className="text-center text-sm text-muted-foreground py-10">No messages yet.</p>}
         </div>
-        <div className="border-t p-3 space-y-2">
+        <div className="border-t p-3 space-y-2 bg-card shadow-inner">
           {attachments.length > 0 && (
             <div className="px-1">
               <AttachmentList attachments={attachments} />
@@ -520,6 +574,110 @@ function ChannelThread({ channelId }: { channelId: string }) {
         <ThreadPanel parentId={threadParentId} channelId={channelId} onClose={() => setThreadParentId(null)} />
       )}
     </div>
+  );
+}
+
+function ChannelDetailsDialog({ channelId, name, description, channelType }: { channelId: string; name: string; description: string; channelType?: string }) {
+  const [open, setOpen] = useState(false);
+
+  const { data: members = [], isLoading } = useQuery({
+    queryKey: ["channel-members-details", channelId],
+    enabled: open,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("channel_members")
+        .select("employee_id, is_moderator")
+        .eq("channel_id", channelId);
+      if (error) throw error;
+      return (data ?? []) as { employee_id: string; is_moderator: boolean }[];
+    },
+  });
+
+  const memberIds = members.map((m) => m.employee_id);
+
+  const { data: memberNames = {} } = useQuery({
+    queryKey: ["channel-details-member-names", channelId, memberIds.sort().join(",")],
+    enabled: open && memberIds.length > 0,
+    queryFn: async () => {
+      const map: Record<string, string> = {};
+      const { data } = await supabase.from("employees").select("id, full_name, alias_name").in("id", memberIds);
+      (data ?? []).forEach((e: { id: string; full_name: string; alias_name: string | null }) => {
+        map[e.id] = e.alias_name || e.full_name;
+      });
+      const missing = memberIds.filter((id) => !map[id]);
+      const fetched = await Promise.all(missing.map((id) => supabase.rpc("get_employee_public_profile", { _id: id })));
+      fetched.forEach((r, i) => {
+        const row = Array.isArray(r.data) ? r.data[0] : r.data;
+        if (row?.full_name || row?.alias_name)
+          map[missing[i]] = (row as { full_name?: string; alias_name?: string | null }).alias_name || row.full_name!;
+      });
+      return map;
+    },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" className="gap-1.5 h-8">
+          <Info className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">View Details</span>
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-lg font-bold">
+            <Hash className="h-5 w-5 text-primary shrink-0" />
+            {name}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-2">
+          {description && (
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground uppercase tracking-wider">Description</Label>
+              <p className="text-sm bg-muted/30 p-2.5 rounded-md border text-card-foreground leading-relaxed break-words">{description}</p>
+            </div>
+          )}
+          {channelType && (
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground uppercase tracking-wider">Channel Type</Label>
+              <div>
+                <Badge variant="secondary" className="capitalize">
+                  {channelType}
+                </Badge>
+              </div>
+            </div>
+          )}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wider">
+              Members ({members.length})
+            </Label>
+            <div className="max-h-48 overflow-auto border rounded-md divide-y bg-background">
+              {isLoading && <p className="p-3 text-xs text-muted-foreground text-center">Loading members…</p>}
+              {!isLoading && members.length === 0 && (
+                <p className="p-3 text-xs text-muted-foreground text-center">No members found.</p>
+              )}
+              {!isLoading && members.map((m) => (
+                <div key={m.employee_id} className="flex items-center gap-2 p-2.5 hover:bg-muted/30">
+                  <div className="text-sm font-medium truncate flex-1">
+                    {(memberNames as Record<string, string>)[m.employee_id] ?? m.employee_id}
+                  </div>
+                  {m.is_moderator && (
+                    <Badge variant="secondary" className="text-[10px] scale-90 select-none">
+                      Moderator
+                    </Badge>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <DialogFooter className="sm:justify-end pt-2">
+          <Button type="button" variant="ghost" onClick={() => setOpen(false)} className="w-full sm:w-auto">
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
