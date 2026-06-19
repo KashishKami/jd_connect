@@ -64,7 +64,7 @@ export function MessageReactions({ messageId }: { messageId: string }) {
       })}
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <button className="opacity-0 group-hover:opacity-100 rounded-full border px-1.5 py-0.5 text-xs hover:bg-muted">
+          <button className="hidden group-hover:inline-flex items-center rounded-full border px-1.5 py-0.5 text-xs hover:bg-muted">
             <Smile className="h-3 w-3" />
           </button>
         </PopoverTrigger>

@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Outlet, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Send, Search, MessageSquarePlus, Circle } from "lucide-react";
+import { Send, Search, MessageSquarePlus, Circle, Check, CheckCheck, User, Info } from "lucide-react";
 import { toast } from "sonner";
 import { MentionInput, renderMessageBody } from "@/components/MentionInput";
 import { MessageReactions } from "@/components/MessageReactions";
@@ -252,6 +252,65 @@ function ChatThread({ conversationId }: { conversationId: string }) {
   const qc = useQueryClient();
   const [body, setBody] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const lastScrollConvId = useRef<string | null>(null);
+
+  // Fetch conversation and participant metadata
+  const { data: conversation } = useQuery({
+    queryKey: ["conversation", conversationId],
+    enabled: !!conversationId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("conversations")
+        .select("id, type, title, participants:conversation_participants(employee_id, employees:employees(id, full_name, alias_name, employee_code, designation))")
+        .eq("id", conversationId)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const otherParticipant = useMemo(() => {
+    if (!conversation) return null;
+    return conversation.participants.find((p) => p.employee_id !== employee?.id) || null;
+  }, [conversation, employee?.id]);
+
+  const otherId = otherParticipant?.employee_id;
+
+  // Fallback public profile query for participants hidden by RLS
+  const { data: otherPublicProfile } = useQuery({
+    queryKey: ["chat-public-profile", otherId],
+    enabled: !!otherId && !otherParticipant?.employees,
+    queryFn: async () => {
+      if (!otherId) return null;
+      const { data } = await supabase.rpc("get_employee_public_profile", { _id: otherId });
+      const row = Array.isArray(data) ? data[0] : data;
+      return row as { full_name: string; alias_name: string | null; employee_code: string } | null;
+    },
+  });
+
+  const chatTitle = useMemo(() => {
+    if (!conversation) return "Loading...";
+    if (conversation.type === "group") return conversation.title ?? "Group Chat";
+    
+    // Direct chat
+    const emp = otherParticipant?.employees;
+    if (emp) return emp.alias_name || emp.full_name;
+    if (otherPublicProfile) return otherPublicProfile.alias_name || otherPublicProfile.full_name;
+    return "Direct Chat";
+  }, [conversation, otherParticipant, otherPublicProfile]);
+
+  const chatSubtitle = useMemo(() => {
+    if (!conversation) return "";
+    if (conversation.type === "group") return "Group Conversation";
+    
+    // Direct chat
+    const emp = otherParticipant?.employees;
+    const code = emp?.employee_code || otherPublicProfile?.employee_code;
+    const designation = emp?.designation;
+    
+    const parts = [code, designation].filter(Boolean);
+    return parts.join(" · ");
+  }, [conversation, otherParticipant, otherPublicProfile]);
 
   const { data: messages = [] } = useQuery({
     queryKey: ["messages", conversationId],
@@ -288,8 +347,18 @@ function ChatThread({ conversationId }: { conversationId: string }) {
   }, [conversationId, qc]);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages.length]);
+    if (!scrollRef.current) return;
+    if (lastScrollConvId.current !== conversationId) {
+      // Instant scroll on switching conversation
+      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "auto" });
+      if (messages.length > 0) {
+        lastScrollConvId.current = conversationId;
+      }
+    } else {
+      // Smooth scroll for subsequent message updates (e.g. new message received/sent)
+      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    }
+  }, [messages.length, conversationId]);
 
   const send = async () => {
     const text = body.trim();
@@ -303,16 +372,52 @@ function ChatThread({ conversationId }: { conversationId: string }) {
 
   return (
     <>
-      <div ref={scrollRef} className="flex-1 overflow-auto p-4 space-y-2">
+      {/* Static header bar at the top */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-emerald-600/30 bg-emerald-500 dark:bg-emerald-600 text-white shadow-sm">
+        <div className="flex items-center gap-3 min-w-0">
+          <Avatar className="h-9 w-9 border border-white/20">
+            <AvatarFallback className="bg-white/20 text-white font-semibold">{initials(chatTitle)}</AvatarFallback>
+          </Avatar>
+          <div className="min-w-0">
+            <div className="text-sm font-semibold truncate text-white">{chatTitle}</div>
+            {chatSubtitle && <div className="text-xs text-emerald-100/90 truncate">{chatSubtitle}</div>}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {conversation?.type === "direct" && otherId && (
+            <Button variant="ghost" size="sm" asChild className="gap-1.5 h-8 bg-white/10 hover:bg-white/20 text-white border-none">
+              <Link to="/employees/$id" params={{ id: otherId }}>
+                <User className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">View Profile</span>
+              </Link>
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Messages viewport */}
+      <div ref={scrollRef} className="flex-1 overflow-auto p-4 space-y-3 bg-[#eef2f6] dark:bg-[#0b0f17]">
         {messages.map((m) => {
           const mine = m.sender_id === employee?.id;
           return (
-            <div key={m.id} className={`group flex ${mine ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-[70%] rounded-lg px-3 py-2 text-sm ${mine ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
-                <div className="whitespace-pre-wrap">{renderMessageBody(m.body)}</div>
-                <div className="text-[10px] opacity-70 mt-1 flex items-center gap-1 justify-end">
+            <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+              <div className={`max-w-[75%] rounded-2xl py-2 text-sm shadow-sm border ${
+                mine
+                  ? "bg-primary text-primary-foreground border-primary/20 rounded-tr-none pl-4 pr-2.5"
+                  : "bg-card text-card-foreground border-border/50 rounded-tl-none pl-3 pr-4"
+              }`}>
+                <div className="leading-relaxed">{renderMessageBody(m.body)}</div>
+                <div className="text-[10px] mt-1.5 flex items-center justify-end select-none gap-1 opacity-70">
                   {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  {mine && <span>· {m.status}</span>}
+                  {mine && (
+                    <span className="shrink-0">
+                      {m.status === "read" ? (
+                        <CheckCheck className="h-3.5 w-3.5 text-sky-300" />
+                      ) : (
+                        <Check className="h-3.5 w-3.5 text-primary-foreground/60" />
+                      )}
+                    </span>
+                  )}
                 </div>
                 <MessageReactions messageId={m.id} />
               </div>
@@ -321,9 +426,16 @@ function ChatThread({ conversationId }: { conversationId: string }) {
         })}
         {messages.length === 0 && <p className="text-center text-sm text-muted-foreground py-10">Say hello 👋</p>}
       </div>
-      <div className="border-t p-3 flex gap-2">
-        <MentionInput value={body} onChange={setBody} onSubmit={send} placeholder="Type a message… use @ to mention" maxLength={4000} />
-        <Button onClick={send} disabled={!body.trim()}><Send className="h-4 w-4" /></Button>
+      <div className="border-t border-emerald-600/30 p-3 flex gap-2 bg-emerald-500 dark:bg-emerald-600 shadow-inner">
+        <MentionInput 
+          value={body} 
+          onChange={setBody} 
+          onSubmit={send} 
+          placeholder="Type a message… use @ to mention" 
+          maxLength={4000} 
+          className="[&_.text-muted-foreground]:text-emerald-100/80 [&_button]:text-white/80 [&_button:hover]:text-white [&_span.text-\[10px\]]:text-emerald-100/80"
+        />
+        <Button onClick={send} disabled={!body.trim()} className="bg-white hover:bg-white/90 text-emerald-600 dark:text-emerald-700"><Send className="h-4 w-4" /></Button>
       </div>
     </>
   );
