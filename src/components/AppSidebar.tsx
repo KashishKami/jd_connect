@@ -30,11 +30,20 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
 import { useCommUnread } from "@/components/useCommUnread";
 import { usePermissions } from "@/hooks/usePermissions";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { ChevronRight, MessageSquare, Hash, Megaphone } from "lucide-react";
 
 const main = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
@@ -71,12 +80,16 @@ const admin = [
 ];
 
 export function AppSidebar() {
-  const path = useRouterState({ select: (s) => s.location.pathname });
+  const routerState = useRouterState();
+  const path = routerState.location.pathname;
+  const search = routerState.location.search;
+  const section = (search as { section?: string }).section;
   const { isAdmin } = useAuth();
   // Active = exact match OR a prefix match where no other sidebar URL is a longer/more-specific match.
   const allUrls = [...main.map((i) => i.url), ...admin.map((i) => i.url)];
   const isActive = (u: string) => {
     if (path === u) return true;
+    if (u === "/communication" && (path.startsWith("/chat") || path.startsWith("/channels"))) return true;
     if (!path.startsWith(u + "/")) return false;
     return !allUrls.some(
       (other) => other !== u && other.length > u.length && (path === other || path.startsWith(other + "/")),
@@ -114,21 +127,82 @@ export function AppSidebar() {
                   }
                   return can(perm);
                 })
-                .map((item) => (
-                  <SidebarMenuItem key={item.url}>
-                    <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
-                      <Link to={item.url}>
-                        <item.icon />
-                        <span>{item.title}</span>
-                        {item.url === "/communication" && unread.total > 0 && (
-                          <Badge className="ml-auto h-5 min-w-5 justify-center px-1.5 text-[10px]">
-                            {unread.total > 99 ? "99+" : unread.total}
-                          </Badge>
-                        )}
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
+                .map((item) => {
+                  if (item.url === "/communication") {
+                    const active = isActive(item.url);
+                    return (
+                      <Collapsible
+                        key={item.url}
+                        asChild
+                        defaultOpen={active}
+                        className="group/collapsible"
+                      >
+                        <SidebarMenuItem>
+                          <CollapsibleTrigger asChild>
+                            <SidebarMenuButton tooltip={item.title} isActive={active}>
+                              <item.icon />
+                              <span>{item.title}</span>
+                              <ChevronRight className="ml-auto h-4 w-4 shrink-0 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+                            </SidebarMenuButton>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <SidebarMenuSub>
+                              <SidebarMenuSubItem>
+                                <SidebarMenuSubButton asChild isActive={active && (section === "dm" || (!section && path === "/communication") || path.startsWith("/chat"))}>
+                                  <Link to="/communication" search={{ section: "dm" }} className="flex items-center gap-2 w-full">
+                                    <MessageSquare className="h-4 w-4 shrink-0" />
+                                    <span>Direct Messages</span>
+                                    {unread.dm > 0 && (
+                                      <Badge className="ml-auto h-5 min-w-5 justify-center px-1.5 text-[10px] shrink-0">
+                                        {unread.dm > 99 ? "99+" : unread.dm}
+                                      </Badge>
+                                    )}
+                                  </Link>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                              <SidebarMenuSubItem>
+                                <SidebarMenuSubButton asChild isActive={active && (section === "channels" || path.startsWith("/channels"))}>
+                                  <Link to="/communication" search={{ section: "channels" }} className="flex items-center gap-2 w-full">
+                                    <Hash className="h-4 w-4 shrink-0" />
+                                    <span>Channels</span>
+                                    {unread.channels > 0 && (
+                                      <Badge className="ml-auto h-5 min-w-5 justify-center px-1.5 text-[10px] shrink-0">
+                                        {unread.channels > 99 ? "99+" : unread.channels}
+                                      </Badge>
+                                    )}
+                                  </Link>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                              <SidebarMenuSubItem>
+                                <SidebarMenuSubButton asChild isActive={active && section === "announcements"}>
+                                  <Link to="/communication" search={{ section: "announcements" }} className="flex items-center gap-2 w-full">
+                                    <Megaphone className="h-4 w-4 shrink-0" />
+                                    <span>Announcements</span>
+                                    {unread.announcements > 0 && (
+                                      <Badge className="ml-auto h-5 min-w-5 justify-center px-1.5 text-[10px] shrink-0">
+                                        {unread.announcements > 99 ? "99+" : unread.announcements}
+                                      </Badge>
+                                    )}
+                                  </Link>
+                                </SidebarMenuSubButton>
+                              </SidebarMenuSubItem>
+                            </SidebarMenuSub>
+                          </CollapsibleContent>
+                        </SidebarMenuItem>
+                      </Collapsible>
+                    );
+                  }
+                  return (
+                    <SidebarMenuItem key={item.url}>
+                      <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
+                        <Link to={item.url}>
+                          <item.icon />
+                          <span>{item.title}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

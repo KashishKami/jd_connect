@@ -385,7 +385,7 @@ function ChatThread({ conversationId }: { conversationId: string }) {
         </div>
         <div className="flex items-center gap-2">
           {conversation?.type === "direct" && otherId && (
-            <Button variant="ghost" size="sm" asChild className="gap-1.5 h-8 bg-white/10 hover:bg-white/20 text-white border-none">
+            <Button variant="outline" size="sm" asChild className="gap-1.5 h-8 bg-white/10 hover:bg-white/20 text-white border border-white/60">
               <Link to="/employees/$id" params={{ id: otherId }}>
                 <User className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">View Profile</span>
