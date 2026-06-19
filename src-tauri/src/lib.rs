@@ -30,9 +30,9 @@ fn send_native_notification(app: tauri::AppHandle, payload: NativeNotificationPa
     #[cfg(target_os = "macos")]
     {
       if cfg!(debug_assertions) {
-        notification.set_application("com.apple.Terminal");
+        let _ = notify_rust::set_application("com.apple.Terminal");
       } else {
-        notification.set_application("in.jdconnect.desktop");
+        let _ = notify_rust::set_application("in.jdconnect.desktop");
       }
     }
 
