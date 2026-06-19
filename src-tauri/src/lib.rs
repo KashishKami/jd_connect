@@ -18,7 +18,8 @@ fn send_native_notification(app: tauri::AppHandle, payload: NativeNotificationPa
     let mut notification = notify_rust::Notification::new();
     notification
       .summary(&payload.title)
-      .body(&payload.body);
+      .body(&payload.body)
+      .sound_name("Default");
 
     #[cfg(target_os = "windows")]
     {
