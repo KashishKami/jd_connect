@@ -177,7 +177,7 @@ export function AppSidebar() {
                                 <SidebarMenuSubButton asChild isActive={active && section === "announcements"}>
                                   <Link to="/communication" search={{ section: "announcements" }} className="flex items-center gap-2 w-full">
                                     <Megaphone className="h-4 w-4 shrink-0" />
-                                    <span>Announcements</span>
+                                    <span>News & Updates</span>
                                     {unread.announcements > 0 && (
                                       <Badge className="ml-auto h-5 min-w-5 justify-center px-1.5 text-[10px] shrink-0">
                                         {unread.announcements > 99 ? "99+" : unread.announcements}

@@ -10,7 +10,8 @@ type ChatBody = {
   conversationId?: string;
 };
 
-const SYSTEM_PROMPT = `You are JD AI, the internal assistant for JD Connect — a company workforce platform.
+function buildSystemPrompt() {
+  return `You are JD AI, the internal assistant for JD Connect — a company workforce platform.
 
 You answer questions using ONLY:
 - Company documents (via the search_documents tool)
@@ -28,7 +29,8 @@ Rules:
 6. If you don't have enough information, say: "I don't have that information in JD Connect. Please contact Adam."
 7. Never invent numbers, names, or document titles.
 
-Today's date: ${new Date().toISOString().slice(0, 10)}.`;
+Today's date: ${new Date().toISOString().slice(0, 10)} — always use this as the reference when the user asks about "today", "this week", "last week", etc.`; 
+}
 
 export const Route = createFileRoute("/api/chat")({
   server: {
@@ -149,7 +151,7 @@ export const Route = createFileRoute("/api/chat")({
         const modelMessages = await convertToModelMessages(messages);
         const result = streamText({
           model,
-          system: SYSTEM_PROMPT,
+          system: buildSystemPrompt(),
           messages: modelMessages,
           tools,
           stopWhen: stepCountIs(8),

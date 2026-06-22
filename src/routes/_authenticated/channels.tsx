@@ -258,7 +258,7 @@ export function ChannelsPage({ initialChannelId }: { initialChannelId?: string }
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-[2fr_3fr] gap-4 h-[calc(100vh-8rem)]">
+    <div className="grid grid-cols-1 md:grid-cols-[380px_1fr] gap-4 h-[calc(100vh-8rem)]">
       <Card className="flex flex-col">
         <div className="p-3 border-b flex items-center justify-between">
           <h2 className="font-semibold">Channels</h2>
@@ -307,7 +307,7 @@ function ChannelThread({ channelId }: { channelId: string }) {
   const canModerate = isAdmin || hasRole("manager") || hasRole("team_leader") || can("channels.moderate");
 
   // Membership check (drives whether messages render or a "request to join" panel)
-  const { data: membership } = useQuery({
+  const { data: membership, isLoading: isMembershipLoading } = useQuery({
     queryKey: ["ch-membership", channelId, employee?.id],
     enabled: !!employee?.id,
     queryFn: async () => {
@@ -329,7 +329,7 @@ function ChannelThread({ channelId }: { channelId: string }) {
     },
   });
 
-  const { data: messages = [] } = useQuery({
+  const { data: messages = [], isLoading: isMessagesLoading } = useQuery({
     queryKey: ["ch-messages", channelId],
     enabled: membership === true,
     queryFn: async () => {
@@ -344,6 +344,8 @@ function ChannelThread({ channelId }: { channelId: string }) {
       return (data ?? []) as Msg[];
     },
   });
+
+  const isThreadLoading = isMembershipLoading || (membership === true && isMessagesLoading);
 
   const senderIds = Array.from(new Set(messages.map((m) => m.sender_id))).sort();
   const { data: senders = {} } = useQuery({
@@ -543,7 +545,7 @@ function ChannelThread({ channelId }: { channelId: string }) {
               </div>
             );
           })}
-          {messages.length === 0 && <p className="text-center text-sm text-muted-foreground py-10">No messages yet.</p>}
+          {!isThreadLoading && messages.length === 0 && <p className="text-center text-sm text-muted-foreground py-10">No messages yet.</p>}
         </div>
         <div className="border-t p-3 space-y-2 bg-card shadow-inner">
           {attachments.length > 0 && (

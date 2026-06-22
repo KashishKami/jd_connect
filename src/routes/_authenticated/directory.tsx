@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,6 +10,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { PresenceDot } from "@/components/PresenceDot";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { MessageSquare } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/directory")({
   head: () => ({ meta: [{ title: "Employee Directory — JD Connect" }] }),
@@ -17,7 +20,8 @@ export const Route = createFileRoute("/_authenticated/directory")({
 });
 
 function Directory() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, employee: me } = useAuth();
+  const navigate = useNavigate();
   const { can, isLoading: permsLoading } = usePermissions();
   const allowed = isAdmin || can("employees.view");
   const [q, setQ] = useState("");
@@ -25,6 +29,24 @@ function Directory() {
   const [centre, setCentre] = useState<string>("all");
   const [role, setRole] = useState<string>("all");
   const [status, setStatus] = useState<string>("all");
+  const [chatLoadingId, setChatLoadingId] = useState<string | null>(null);
+
+  const handleGoToChat = async (otherId: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    event.preventDefault();
+    if (!me?.id) return;
+    setChatLoadingId(otherId);
+    try {
+      const { data, error } = await supabase.rpc("start_direct_chat", { _other: otherId });
+      if (error) throw error;
+      if (!data) throw new Error("Could not start chat");
+      void navigate({ to: "/chat/$conversationId", params: { conversationId: data as string } });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to open chat");
+    } finally {
+      setChatLoadingId(null);
+    }
+  };
 
   const { data: filters } = useQuery({
     queryKey: ["dir-filters"],
@@ -124,6 +146,7 @@ function Directory() {
                 <TableHead>Centre</TableHead>
                 <TableHead>Role</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead className="text-center w-20">Chat</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -145,10 +168,26 @@ function Directory() {
                   <TableCell>
                     <Badge variant={statusColor[e.employment_status as keyof typeof statusColor]}>{e.employment_status}</Badge>
                   </TableCell>
+                  <TableCell className="text-center">
+                    {me?.id !== e.id ? (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+                        title="Go to chat"
+                        onClick={(ev) => handleGoToChat(e.id, ev)}
+                        disabled={chatLoadingId === e.id}
+                      >
+                        <MessageSquare className="h-4 w-4" />
+                      </Button>
+                    ) : (
+                      "—"
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
               {rows && rows.length === 0 && (
-                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No employees found</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No employees found</TableCell></TableRow>
               )}
             </TableBody>
           </Table>

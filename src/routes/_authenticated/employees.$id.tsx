@@ -1,5 +1,5 @@
 import { formatDate, formatDateTime } from "@/lib/utils";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,7 +14,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Paperclip, FileText, ArrowLeft, Lock, Pencil } from "lucide-react";
+import { Paperclip, FileText, ArrowLeft, Lock, Pencil, MessageSquare } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fmtUSD } from "@/lib/csv";
@@ -37,9 +37,26 @@ const noteCategories = [
 function ProfilePage() {
   const { id } = Route.useParams();
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const { isAdmin, employee: me } = useAuth();
   const isSelf = me?.id === id;
   const [editOpen, setEditOpen] = useState(false);
+  const [chatLoading, setChatLoading] = useState(false);
+
+  const handleGoToChat = async () => {
+    if (!me?.id) return;
+    setChatLoading(true);
+    try {
+      const { data, error } = await supabase.rpc("start_direct_chat", { _other: id });
+      if (error) throw error;
+      if (!data) throw new Error("Could not start chat");
+      void navigate({ to: "/chat/$conversationId", params: { conversationId: data as string } });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to open chat");
+    } finally {
+      setChatLoading(false);
+    }
+  };
 
   const { data: emp, isLoading: empLoading } = useQuery({
     queryKey: ["employee", id],
@@ -159,11 +176,18 @@ function ProfilePage() {
             )}
             <p className="text-sm mt-1">{view.designation ?? "—"}</p>
           </div>
-          {(isSelf || isAdmin) && (
-            <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
-              <Pencil className="h-3 w-3 mr-1" /> Edit profile
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {!isSelf && (
+              <Button variant="default" size="sm" onClick={handleGoToChat} disabled={chatLoading}>
+                <MessageSquare className="h-3.5 w-3.5 mr-1.5" /> Go to Chat
+              </Button>
+            )}
+            {(isSelf || isAdmin) && (
+              <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+                <Pencil className="h-3 w-3 mr-1" /> Edit profile
+              </Button>
+            )}
+          </div>
         </CardContent>
       </Card>
 

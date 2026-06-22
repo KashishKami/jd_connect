@@ -141,9 +141,17 @@ export function ChatNotifier() {
         if (!active) return;
         const unlisten = await listen(
           "notification-clicked",
-          (event: { payload: { kind: string; target_id: string } }) => {
+          async (event: { payload: { kind: string; target_id: string } }) => {
             const { kind, target_id } = event.payload;
-            window.focus();
+            // Bring the native window to the foreground
+            try {
+              const { getCurrentWindow } = await import("@tauri-apps/api/window");
+              const win = getCurrentWindow();
+              await win.unminimize();
+              await win.setFocus();
+            } catch {
+              window.focus();
+            }
             if (kind === "direct") {
               void navigate({ to: "/chat/$conversationId", params: { conversationId: target_id } });
             } else if (kind === "channel") {

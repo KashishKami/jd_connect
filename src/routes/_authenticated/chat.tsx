@@ -102,6 +102,7 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
   const { data: messageMeta = { lastMessages: {}, unreadCounts: {} } as MessageMeta } = useQuery<MessageMeta>({
     queryKey: ["chat-message-meta", convIds.join(","), mineConvs.map((c) => c.participants.find((p) => p.employee_id === employee?.id)?.last_read_at ?? "").join(",")],
     enabled: convIds.length > 0,
+    placeholderData: (prev) => prev,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("messages")
@@ -156,9 +157,13 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
   }, [employee?.id, qc]);
 
   const filtered = useMemo(() => {
+    // Only show conversations that have at least one message
+    const withMessages = mineConvs.filter(
+      (c) => !!c.last_message_at || !!messageMeta.lastMessages[c.id] || c.id === activeId,
+    );
     const q = search.toLowerCase().trim();
-    if (!q) return mineConvs;
-    return mineConvs.filter((c) => {
+    if (!q) return withMessages;
+    return withMessages.filter((c) => {
       if ((c.title ?? "").toLowerCase().includes(q)) return true;
       return c.participants.some((p) => {
         const emp = p.employees;
@@ -169,7 +174,7 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
         return nm.toLowerCase().includes(q) || full.toLowerCase().includes(q) || code.toLowerCase().includes(q);
       });
     });
-  }, [mineConvs, search, publicProfiles]);
+  }, [mineConvs, search, publicProfiles, messageMeta.lastMessages, activeId]);
 
   const openConversation = (conversationId: string) => {
     setActiveId(conversationId);
@@ -312,7 +317,7 @@ function ChatThread({ conversationId }: { conversationId: string }) {
     return parts.join(" · ");
   }, [conversation, otherParticipant, otherPublicProfile]);
 
-  const { data: messages = [] } = useQuery({
+  const { data: messages = [], isLoading } = useQuery({
     queryKey: ["messages", conversationId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -424,7 +429,7 @@ function ChatThread({ conversationId }: { conversationId: string }) {
             </div>
           );
         })}
-        {messages.length === 0 && <p className="text-center text-sm text-muted-foreground py-10">Say hello 👋</p>}
+        {!isLoading && messages.length === 0 && <p className="text-center text-sm text-muted-foreground py-10">Say hello 👋</p>}
       </div>
       <div className="border-t p-3 flex gap-2 bg-card shadow-inner">
         <MentionInput 

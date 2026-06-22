@@ -14,7 +14,7 @@ import { z } from "zod";
 import { Apple, Monitor, Download } from "lucide-react";
 
 export const Route = createFileRoute("/auth")({
-  validateSearch: (s: Record<string, unknown>) => ({
+  validateSearch: (s: Record<string, unknown>): { reason?: string } => ({
     reason: typeof s.reason === "string" ? s.reason : undefined,
   }),
   head: () => ({

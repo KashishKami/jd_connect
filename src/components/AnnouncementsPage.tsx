@@ -63,7 +63,7 @@ export function AnnouncementsPage() {
     <div className="max-w-4xl mx-auto space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold flex items-center gap-2">
-          <Megaphone className="h-6 w-6" /> Announcements
+          <Megaphone className="h-6 w-6" /> News & Updates
         </h1>
         {canPost && <NewAnnouncementDialog onCreated={() => qc.invalidateQueries({ queryKey: ["announcements"] })} />}
       </div>
@@ -149,11 +149,11 @@ function NewAnnouncementDialog({ onCreated }: { onCreated: () => void }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>New Announcement</Button>
+        <Button>New Post</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>New announcement</DialogTitle>
+          <DialogTitle>New Post</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <div>

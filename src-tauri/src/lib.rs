@@ -1,7 +1,7 @@
 use tauri_plugin_updater::UpdaterExt;
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_dialog::{MessageDialogKind, MessageDialogButtons};
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 #[derive(serde::Deserialize, serde::Serialize, Clone)]
 struct NativeNotificationPayload {
@@ -41,6 +41,13 @@ fn send_native_notification(app: tauri::AppHandle, payload: NativeNotificationPa
       Ok(handle) => {
         let _ = handle.wait_for_response(move |response: &notify_rust::NotificationResponse| {
           if matches!(response, notify_rust::NotificationResponse::Default) {
+            // Bring the window to the foreground from Rust — this must happen here,
+            // inside the OS notification callback, while the process still has focus-grant rights.
+            // Doing it from JS (via IPC) is too late; Windows blocks focus stealing at that point.
+            if let Some(win) = app.get_webview_window("main") {
+              let _ = win.unminimize();
+              let _ = win.set_focus();
+            }
             let _ = app.emit("notification-clicked", payload_clone);
           }
         });
