@@ -17,7 +17,7 @@ import { fmtUSD } from "@/lib/csv";
 import { KpiTile } from "@/components/KpiTile";
 import { AgentRankings } from "@/components/AgentRankings";
 import { titleCase } from "@/lib/utils";
-import { DateRangePicker } from "@/components/DateRangePicker";
+import { DateRangePicker, detectPreset } from "@/components/DateRangePicker";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({ meta: [{ title: "Dashboard — JD Connect" }] }),
@@ -34,6 +34,7 @@ function Dashboard() {
   const [to, setTo] = useState(today);
 
   const monthStart = today.slice(0, 8) + "01";
+  const isCustomRange = detectPreset({ from, to }) === "custom";
 
   // Today + MTD company sales for the reorganized header (manager+ only)
   const { data: todayKpi } = useQuery({
@@ -477,45 +478,47 @@ function Dashboard() {
           </section>
 
           {/* Sales — Custom Range (top-of-card date range still applies) */}
-          <section className="space-y-2">
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-              Sales — Selected Range
-            </h2>
-            <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
-              <KpiTile
-                label="Gross (Sales)"
-                value={fmtUSD(kpi?.gross_revenue ?? 0)}
-                linkProps={{ to: "/sales/team", search: { kind: "sales", from, to } as never }}
-              />
-              <KpiTile
-                label="Refunds"
-                value={fmtUSD(kpi?.refunds ?? 0)}
-                linkProps={{ to: "/sales/team", search: { kind: "refund", from, to } as never }}
-              />
-              <KpiTile
-                label="Chargebacks"
-                value={fmtUSD(kpi?.chargebacks ?? 0)}
-                linkProps={{ to: "/sales/team", search: { kind: "chargeback", from, to } as never }}
-              />
-              <KpiTile
-                label="Net Revenue"
-                value={fmtUSD(kpi?.net_revenue ?? 0)}
-                highlight
-                linkProps={{ to: "/sales/team", search: { from, to } as never }}
-              />
-            </div>
-          </section>
+          {isCustomRange && (
+            <section className="space-y-2">
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                Sales — Selected Range
+              </h2>
+              <div className="grid gap-3 grid-cols-2 lg:grid-cols-4">
+                <KpiTile
+                  label="Gross (Sales)"
+                  value={fmtUSD(kpi?.gross_revenue ?? 0)}
+                  linkProps={{ to: "/sales/team", search: { kind: "sales", from, to } as never }}
+                />
+                <KpiTile
+                  label="Refunds"
+                  value={fmtUSD(kpi?.refunds ?? 0)}
+                  linkProps={{ to: "/sales/team", search: { kind: "refund", from, to } as never }}
+                />
+                <KpiTile
+                  label="Chargebacks"
+                  value={fmtUSD(kpi?.chargebacks ?? 0)}
+                  linkProps={{ to: "/sales/team", search: { kind: "chargeback", from, to } as never }}
+                />
+                <KpiTile
+                  label="Net Revenue"
+                  value={fmtUSD(kpi?.net_revenue ?? 0)}
+                  highlight
+                  linkProps={{ to: "/sales/team", search: { from, to } as never }}
+                />
+              </div>
+            </section>
+          )}
 
           {/* Dynamic rankings — one panel per active centre + company-wide */}
           <div className="grid gap-4">
-            <AgentRankings title="Company-wide — Top & Bottom 5 Agents" centreId={null} from={from} to={to} />
+            <AgentRankings title="Company-wide — Top & Bottom 5 Agents (Current Month)" centreId={null} from={monthStart} to={today} />
             {centres.map((c) => (
               <AgentRankings
                 key={c.id}
-                title={`${c.name || c.code} — Top & Bottom 5 Agents`}
+                title={`${c.name || c.code} — Top & Bottom 5 Agents (Current Month)`}
                 centreId={c.id}
-                from={from}
-                to={to}
+                from={monthStart}
+                to={today}
               />
             ))}
           </div>
@@ -536,4 +539,4 @@ function Dashboard() {
 }
 
 // Suppress unused-import warnings for shape parity (Link kept available for ad-hoc additions).
-void Link;
+void Link; // Touch for HMR rebuild

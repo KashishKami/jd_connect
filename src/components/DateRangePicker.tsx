@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 
 export type DateRangeValue = { from: string; to: string };
 
-type PresetKey =
+export type PresetKey =
   | "today"
   | "yesterday"
   | "last2"
@@ -103,7 +103,7 @@ function presetRange(key: PresetKey): { from: string; to: string } | null {
   }
 }
 
-function detectPreset(value: DateRangeValue): PresetKey {
+export function detectPreset(value: DateRangeValue): PresetKey {
   for (const p of PRESETS) {
     if (p.key === "custom") continue;
     const r = presetRange(p.key);

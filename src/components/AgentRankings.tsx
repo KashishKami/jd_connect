@@ -68,7 +68,6 @@ function RankList({ heading, rows, accent }: { heading: string; rows: Row[]; acc
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="text-xs font-mono text-muted-foreground w-4 shrink-0">{i + 1}</span>
                   <span className="truncate text-sm">{r.full_name}</span>
-                  <span className="text-[10px] font-mono text-muted-foreground shrink-0">{r.employee_code}</span>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <span className="text-[11px] text-muted-foreground tabular-nums">{r.sales_count} sales</span>
@@ -82,3 +81,4 @@ function RankList({ heading, rows, accent }: { heading: string; rows: Row[]; acc
     </div>
   );
 }
+// Touch for HMR rebuild
