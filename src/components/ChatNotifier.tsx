@@ -133,17 +133,19 @@ export function ChatNotifier() {
     if (!isTauri) return;
 
     let active = true;
-    let unlistenFn: (() => void) | undefined;
+    let cleanup: (() => void) | undefined;
 
     const setup = async () => {
       try {
         const { listen } = await import("@tauri-apps/api/event");
+        const { onAction } = await import("@tauri-apps/plugin-notification");
         if (!active) return;
-        const unlisten = await listen(
+
+        // Listener for Windows (triggered by custom Rust command wait_for_response)
+        const unlistenCustom = await listen(
           "notification-clicked",
           async (event: { payload: { kind: string; target_id: string } }) => {
             const { kind, target_id } = event.payload;
-            // Bring the native window to the foreground
             try {
               const { getCurrentWindow } = await import("@tauri-apps/api/window");
               const win = getCurrentWindow();
@@ -159,10 +161,36 @@ export function ChatNotifier() {
             }
           }
         );
+
+        // Listener for macOS (triggered by native Cocoa app delegate via tauri-plugin-notification)
+        const actionListener = await onAction(async (event: any) => {
+          const extra = event.notification?.extra;
+          if (extra) {
+            const { kind, targetId } = extra as { kind: string; targetId: string };
+            try {
+              const { getCurrentWindow } = await import("@tauri-apps/api/window");
+              const win = getCurrentWindow();
+              await win.unminimize();
+              await win.setFocus();
+            } catch {
+              window.focus();
+            }
+            if (kind === "direct") {
+              void navigate({ to: "/chat/$conversationId", params: { conversationId: targetId } });
+            } else if (kind === "channel") {
+              void navigate({ to: "/channels/$channelId", params: { channelId: targetId } });
+            }
+          }
+        });
+
         if (!active) {
-          unlisten();
+          unlistenCustom();
+          void actionListener.unregister();
         } else {
-          unlistenFn = unlisten;
+          cleanup = () => {
+            unlistenCustom();
+            void actionListener.unregister();
+          };
         }
       } catch (err) {
         console.error("Failed to setup Tauri notification click listener", err);
@@ -172,7 +200,7 @@ export function ChatNotifier() {
 
     return () => {
       active = false;
-      if (unlistenFn) unlistenFn();
+      if (cleanup) cleanup();
     };
   }, [navigate]);
 
@@ -240,15 +268,30 @@ export function ChatNotifier() {
           const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
           if (isTauri) {
             try {
-              const { invoke } = await import("@tauri-apps/api/core");
-              await invoke("send_native_notification", {
-                payload: {
+              const isMac = navigator.userAgent.includes("Mac");
+              if (isMac) {
+                // Use standard tauri-plugin-notification on macOS for native app identity & automatic foreground focus on click
+                const { sendNotification } = await import("@tauri-apps/plugin-notification");
+                sendNotification({
                   title: incoming.title,
                   body: incoming.body,
-                  kind: incoming.kind,
-                  target_id: incoming.targetId,
-                },
-              });
+                  extra: {
+                    kind: incoming.kind,
+                    targetId: incoming.targetId,
+                  },
+                });
+              } else {
+                // Use custom notify-rust native command on Windows to bypass foreground lock rules
+                const { invoke } = await import("@tauri-apps/api/core");
+                await invoke("send_native_notification", {
+                  payload: {
+                    title: incoming.title,
+                    body: incoming.body,
+                    kind: incoming.kind,
+                    target_id: incoming.targetId,
+                  },
+                });
+              }
               return;
             } catch (err) {
               console.error("Failed to send native Tauri notification, falling back to browser Notification", err);

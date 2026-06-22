@@ -16,7 +16,11 @@ type Row = {
 };
 
 export function AgentRankings({
-  title, centreId, from, to, limit = 5,
+  title,
+  centreId,
+  from,
+  to,
+  limit = 5,
 }: {
   title: string;
   centreId: string | null;
@@ -28,7 +32,10 @@ export function AgentRankings({
     queryKey: ["agent-rankings", centreId, from, to, limit],
     queryFn: async () => {
       const { data, error } = await supabase.rpc("agent_rankings", {
-        _from: from, _to: to, _centre_id: centreId ?? undefined, _limit: limit,
+        _from: from,
+        _to: to,
+        _centre_id: centreId ?? undefined,
+        _limit: limit,
       });
       if (error) throw error;
       return (data ?? []) as Row[];
