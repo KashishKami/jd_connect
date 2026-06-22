@@ -393,12 +393,27 @@ function ChannelThread({ channelId }: { channelId: string }) {
 
   useEffect(() => {
     if (!employee?.id || membership !== true) return;
-    void supabase.rpc("mark_channel_read", { _channel_id: channelId }).then(() => {
-      void qc.invalidateQueries({ queryKey: ["notifications"] });
-      void qc.invalidateQueries({ queryKey: ["channels"] });
-      void qc.invalidateQueries({ queryKey: ["channel-unread-counts"] });
-      void qc.invalidateQueries({ queryKey: ["comm-unread"] });
-    });
+
+    const markRead = () => {
+      if (document.hasFocus() && document.visibilityState === "visible") {
+        void supabase.rpc("mark_channel_read", { _channel_id: channelId }).then(() => {
+          void qc.invalidateQueries({ queryKey: ["notifications"] });
+          void qc.invalidateQueries({ queryKey: ["channels"] });
+          void qc.invalidateQueries({ queryKey: ["channel-unread-counts"] });
+          void qc.invalidateQueries({ queryKey: ["comm-unread"] });
+        });
+      }
+    };
+
+    markRead();
+
+    window.addEventListener("focus", markRead);
+    document.addEventListener("visibilitychange", markRead);
+
+    return () => {
+      window.removeEventListener("focus", markRead);
+      document.removeEventListener("visibilitychange", markRead);
+    };
   }, [channelId, employee?.id, messages.length, qc, membership]);
 
   useEffect(() => {

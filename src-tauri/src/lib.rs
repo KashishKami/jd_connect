@@ -45,6 +45,7 @@ fn send_native_notification(app: tauri::AppHandle, payload: NativeNotificationPa
             // inside the OS notification callback, while the process still has focus-grant rights.
             // Doing it from JS (via IPC) is too late; Windows blocks focus stealing at that point.
             if let Some(win) = app.get_webview_window("main") {
+              let _ = win.show();
               let _ = win.unminimize();
               let _ = win.set_focus();
             }

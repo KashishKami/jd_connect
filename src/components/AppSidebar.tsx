@@ -96,6 +96,7 @@ export function AppSidebar() {
     );
   };
   const unread = useCommUnread();
+  const totalUnread = (unread.dm || 0) + (unread.channels || 0) + (unread.announcements || 0);
   const { can, isLoading: permsLoading } = usePermissions();
 
   return (
@@ -142,6 +143,11 @@ export function AppSidebar() {
                             <SidebarMenuButton tooltip={item.title} isActive={active}>
                               <item.icon />
                               <span>{item.title}</span>
+                              {totalUnread > 0 && (
+                                <Badge className="ml-2 h-5 min-w-5 justify-center px-1.5 text-[10px] shrink-0 group-data-[state=open]/collapsible:hidden group-data-[collapsible=icon]:absolute group-data-[collapsible=icon]:top-1 group-data-[collapsible=icon]:right-1 group-data-[collapsible=icon]:h-4 group-data-[collapsible=icon]:w-4 group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:text-[8px] group-data-[collapsible=icon]:flex group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:justify-center">
+                                  {totalUnread > 99 ? "99+" : totalUnread}
+                                </Badge>
+                              )}
                               <ChevronRight className="ml-auto h-4 w-4 shrink-0 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
                             </SidebarMenuButton>
                           </CollapsibleTrigger>

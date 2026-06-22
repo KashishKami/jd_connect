@@ -149,6 +149,7 @@ export function ChatNotifier() {
             try {
               const { getCurrentWindow } = await import("@tauri-apps/api/window");
               const win = getCurrentWindow();
+              await win.show();
               await win.unminimize();
               await win.setFocus();
             } catch {
@@ -170,6 +171,7 @@ export function ChatNotifier() {
             try {
               const { getCurrentWindow } = await import("@tauri-apps/api/window");
               const win = getCurrentWindow();
+              await win.show();
               await win.unminimize();
               await win.setFocus();
             } catch {
@@ -224,8 +226,13 @@ export function ChatNotifier() {
         if (!targetId) return;
         if (isDirect && !myConvIds.current.has(targetId)) return;
         if (!isDirect && !myChannelIds.current.has(targetId)) return;
-        if (isDirect && pathname.startsWith(`/chat/${targetId}`)) return;
-        if (!isDirect && pathname.startsWith(`/channels/${targetId}`)) return;
+
+        // Suppress notifications ONLY if the chat is open AND the window is focused/visible
+        const isPageActive = isDirect
+          ? pathname.startsWith(`/chat/${targetId}`)
+          : pathname.startsWith(`/channels/${targetId}`);
+        const isAppFocused = typeof document !== "undefined" && document.hasFocus() && document.visibilityState === "visible";
+        if (isPageActive && isAppFocused) return;
 
         const { data: sender } = await supabase
           .from("employees")

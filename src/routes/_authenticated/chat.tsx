@@ -333,12 +333,27 @@ function ChatThread({ conversationId }: { conversationId: string }) {
 
   useEffect(() => {
     if (!employee?.id) return;
-    void supabase.rpc("mark_conversation_read", { _conversation_id: conversationId }).then(() => {
-      void qc.invalidateQueries({ queryKey: ["notifications"] });
-      void qc.invalidateQueries({ queryKey: ["conversations"] });
-      void qc.invalidateQueries({ queryKey: ["chat-message-meta"] });
-      void qc.invalidateQueries({ queryKey: ["comm-unread"] });
-    });
+
+    const markRead = () => {
+      if (document.hasFocus() && document.visibilityState === "visible") {
+        void supabase.rpc("mark_conversation_read", { _conversation_id: conversationId }).then(() => {
+          void qc.invalidateQueries({ queryKey: ["notifications"] });
+          void qc.invalidateQueries({ queryKey: ["conversations"] });
+          void qc.invalidateQueries({ queryKey: ["chat-message-meta"] });
+          void qc.invalidateQueries({ queryKey: ["comm-unread"] });
+        });
+      }
+    };
+
+    markRead();
+
+    window.addEventListener("focus", markRead);
+    document.addEventListener("visibilitychange", markRead);
+
+    return () => {
+      window.removeEventListener("focus", markRead);
+      document.removeEventListener("visibilitychange", markRead);
+    };
   }, [conversationId, employee?.id, messages.length, qc]);
 
   useEffect(() => {
