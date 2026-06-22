@@ -334,8 +334,20 @@ function ChatThread({ conversationId }: { conversationId: string }) {
   useEffect(() => {
     if (!employee?.id) return;
 
-    const markRead = () => {
-      if (document.hasFocus() && document.visibilityState === "visible") {
+    const markRead = async () => {
+      const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+      let isAppFocused = typeof document !== "undefined" && document.hasFocus() && document.visibilityState === "visible";
+      
+      if (isTauri) {
+        try {
+          const { getCurrentWindow } = await import("@tauri-apps/api/window");
+          const win = getCurrentWindow();
+          const [focused, minimized] = await Promise.all([win.isFocused(), win.isMinimized()]);
+          isAppFocused = focused && !minimized;
+        } catch {}
+      }
+
+      if (isAppFocused) {
         void supabase.rpc("mark_conversation_read", { _conversation_id: conversationId }).then(() => {
           void qc.invalidateQueries({ queryKey: ["notifications"] });
           void qc.invalidateQueries({ queryKey: ["conversations"] });
@@ -345,7 +357,7 @@ function ChatThread({ conversationId }: { conversationId: string }) {
       }
     };
 
-    markRead();
+    void markRead();
 
     window.addEventListener("focus", markRead);
     document.addEventListener("visibilitychange", markRead);

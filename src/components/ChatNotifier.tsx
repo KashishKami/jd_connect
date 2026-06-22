@@ -231,7 +231,18 @@ export function ChatNotifier() {
         const isPageActive = isDirect
           ? pathname.startsWith(`/chat/${targetId}`)
           : pathname.startsWith(`/channels/${targetId}`);
-        const isAppFocused = typeof document !== "undefined" && document.hasFocus() && document.visibilityState === "visible";
+        const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+        let isAppFocused = typeof document !== "undefined" && document.hasFocus() && document.visibilityState === "visible";
+        if (isTauri) {
+          try {
+            const { getCurrentWindow } = await import("@tauri-apps/api/window");
+            const win = getCurrentWindow();
+            const [focused, minimized] = await Promise.all([win.isFocused(), win.isMinimized()]);
+            isAppFocused = focused && !minimized;
+          } catch (e) {
+            console.error("Failed to query native window focus state", e);
+          }
+        }
         if (isPageActive && isAppFocused) return;
 
         const { data: sender } = await supabase
@@ -280,6 +291,7 @@ export function ChatNotifier() {
                 // Use standard tauri-plugin-notification on macOS for native app identity & automatic foreground focus on click
                 const { sendNotification } = await import("@tauri-apps/plugin-notification");
                 sendNotification({
+                  id: Math.floor(Math.random() * 1000000),
                   title: incoming.title,
                   body: incoming.body,
                   extra: {
