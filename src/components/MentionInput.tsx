@@ -140,31 +140,40 @@ export const MentionInput = forwardRef<MentionInputHandle, {
   );
 });
 
-function highlightMentions(text: string): React.ReactNode {
+function highlightMentions(text: string, isCurrentUser?: boolean): React.ReactNode {
   const parts = text.split(/(@[A-Za-z0-9_]{2,32})/g);
   return parts.map((p, i) =>
     /^@[A-Za-z0-9_]{2,32}$/.test(p) ? (
-      <span key={i} className="text-primary font-medium bg-primary/10 rounded px-1">{p}</span>
+      <span
+        key={i}
+        className={
+          isCurrentUser
+            ? "text-white font-medium"
+            : "text-primary font-medium"
+        }
+      >
+        {p}
+      </span>
     ) : (
       <span key={i}>{p}</span>
     ),
   );
 }
 
-function processChildren(children: React.ReactNode): React.ReactNode {
-  if (typeof children === "string") return highlightMentions(children);
-  if (Array.isArray(children)) return children.map((c, i) => <React.Fragment key={i}>{processChildren(c)}</React.Fragment>);
+function processChildren(children: React.ReactNode, isCurrentUser?: boolean): React.ReactNode {
+  if (typeof children === "string") return highlightMentions(children, isCurrentUser);
+  if (Array.isArray(children)) return children.map((c, i) => <React.Fragment key={i}>{processChildren(c, isCurrentUser)}</React.Fragment>);
   return children;
 }
 
-export function renderMessageBody(body: string) {
+export function renderMessageBody(body: string, isCurrentUser?: boolean) {
   return (
     <div className="prose prose-sm dark:prose-invert max-w-none break-words [&_p]:my-1 [&_h1]:text-base [&_h2]:text-sm [&_h1]:mt-1 [&_h2]:mt-1 [&_ul]:my-1 [&_ol]:my-1 [&_pre]:my-1">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          p: ({ children }) => <p>{processChildren(children)}</p>,
-          li: ({ children }) => <li>{processChildren(children)}</li>,
+          p: ({ children }) => <p>{processChildren(children, isCurrentUser)}</p>,
+          li: ({ children }) => <li>{processChildren(children, isCurrentUser)}</li>,
         }}
       >
         {body}

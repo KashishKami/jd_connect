@@ -534,7 +534,7 @@ function ChannelThread({ channelId }: { channelId: string }) {
                       ? "bg-primary text-primary-foreground border-primary/20 rounded-tr-none"
                       : "bg-card text-card-foreground border-border/50 rounded-tl-none"
                   }`}>
-                    <div className="leading-relaxed break-words">{renderMessageBody(m.body)}</div>
+                    <div className="leading-relaxed break-words">{renderMessageBody(m.body, mine)}</div>
                     <AttachmentList attachments={(m.attachments ?? []) as ChatAttachment[]} />
                     <MessageReactions messageId={m.id} />
                     

@@ -438,7 +438,7 @@ function ChatThread({ conversationId }: { conversationId: string }) {
                   ? "bg-primary text-primary-foreground border-primary/20 rounded-tr-none pl-4 pr-2.5"
                   : "bg-card text-card-foreground border-border/50 rounded-tl-none pl-3 pr-4"
               }`}>
-                <div className="leading-relaxed">{renderMessageBody(m.body)}</div>
+                <div className="leading-relaxed">{renderMessageBody(m.body, mine)}</div>
                 <div className="text-[10px] mt-1.5 flex items-center justify-end select-none gap-1 opacity-70">
                   {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                   {mine && (

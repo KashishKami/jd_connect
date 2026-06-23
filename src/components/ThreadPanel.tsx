@@ -98,13 +98,14 @@ export function ThreadPanel({ parentId, channelId, onClose }: { parentId: string
 }
 
 function MessageRow({ m }: { m: ReplyMsg }) {
+  const { employee } = useAuth();
   return (
     <div className="text-sm group">
       <div className="flex items-baseline gap-2">
         <span className="font-medium">{m.employees?.full_name ?? "—"}</span>
         <span className="text-[10px] text-muted-foreground">{formatDateTime(m.created_at)}</span>
       </div>
-      <div className="whitespace-pre-wrap">{renderMessageBody(m.body)}</div>
+      <div className="whitespace-pre-wrap">{renderMessageBody(m.body, m.sender_id === employee?.id)}</div>
       <AttachmentList attachments={(m.attachments ?? []) as ChatAttachment[]} />
       <MessageReactions messageId={m.id} />
     </div>
