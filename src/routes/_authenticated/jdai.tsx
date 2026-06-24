@@ -295,11 +295,14 @@ function ChatWindow({
     onError: (e) => toast.error(e.message),
   });
 
+  const syncedRef = useRef(false);
+
   useEffect(() => {
-    if (status !== "streaming" && status !== "submitted") {
+    if (!loadingHistory && !syncedRef.current) {
       setMessages(initialMessages);
+      syncedRef.current = true;
     }
-  }, [initialMessages, setMessages, status]);
+  }, [initialMessages, loadingHistory, setMessages]);
 
   const [input, setInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);

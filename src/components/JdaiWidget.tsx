@@ -119,16 +119,21 @@ function WidgetChat({ sessionId }: { sessionId: string }) {
 
   // Lazily-created conversation ID — null until the first message is sent
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const conversationIdRef = useRef<string | null>(null);
+  const creationPromiseRef = useRef<Promise<string> | null>(null);
 
   /** Ensure a conversation exists in the DB, create one if not. Returns its id. */
-  const ensureConversation = async (): Promise<string> => {
-    if (conversationIdRef.current) return conversationIdRef.current;
-    const conv = await createFn({ data: { title: "New conversation" } });
-    conversationIdRef.current = conv.id;
-    setConversationId(conv.id);
-    qc.invalidateQueries({ queryKey: ["ai-conversations"] });
-    return conv.id;
+  const ensureConversation = (): Promise<string> => {
+    if (creationPromiseRef.current) return creationPromiseRef.current;
+
+    const promise = (async () => {
+      const conv = await createFn({ data: { title: "New conversation" } });
+      setConversationId(conv.id);
+      qc.invalidateQueries({ queryKey: ["ai-conversations"] });
+      return conv.id;
+    })();
+
+    creationPromiseRef.current = promise;
+    return promise;
   };
 
   const transport = useMemo(
