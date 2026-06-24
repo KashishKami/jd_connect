@@ -8,10 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Send, Search, MessageSquarePlus, Circle, Check, CheckCheck, User, Info } from "lucide-react";
+import { Send, Search, MessageSquarePlus, Circle, Check, CheckCheck, User, Info, ArrowLeft } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { MentionInput, renderMessageBody } from "@/components/MentionInput";
 import { MessageReactions } from "@/components/MessageReactions";
+import { AttachmentPicker, AttachmentList, PendingAttachmentList, type ChatAttachment, uploadFiles } from "@/components/ChatAttachments";
 
 export const Route = createFileRoute("/_authenticated/chat")({
   head: () => ({ meta: [{ title: "Messages — JD Connect" }] }),
@@ -181,9 +183,14 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
     void navigate({ to: "/chat/$conversationId", params: { conversationId } });
   };
 
+  const handleBack = () => {
+    setActiveId(null);
+    void navigate({ to: "/communication", search: { section: "dm" } });
+  };
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-[320px_1fr] gap-4 h-[calc(100vh-8rem)]">
-      <Card className="flex flex-col">
+      <Card className={cn("flex flex-col", activeId ? "hidden md:flex" : "flex")}>
         <div className="p-3 border-b space-y-2">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold">Messages</h2>
@@ -239,9 +246,9 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
         </div>
       </Card>
 
-      <Card className="flex flex-col overflow-hidden">
+      <Card className={cn("flex flex-col overflow-hidden", activeId ? "flex" : "hidden md:flex")}>
         {activeId ? (
-          <ChatThread conversationId={activeId} />
+          <ChatThread conversationId={activeId} onBack={handleBack} />
         ) : (
           <div className="flex-1 grid place-items-center text-muted-foreground text-sm">Select a conversation</div>
         )}
@@ -252,10 +259,11 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
   );
 }
 
-function ChatThread({ conversationId }: { conversationId: string }) {
+function ChatThread({ conversationId, onBack }: { conversationId: string; onBack?: () => void }) {
   const { employee } = useAuth();
   const qc = useQueryClient();
   const [body, setBody] = useState("");
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastScrollConvId = useRef<string | null>(null);
 
@@ -322,7 +330,7 @@ function ChatThread({ conversationId }: { conversationId: string }) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("messages")
-        .select("id, body, sender_id, created_at, status")
+        .select("id, body, sender_id, created_at, status, attachments")
         .eq("conversation_id", conversationId)
         .order("created_at", { ascending: true })
         .limit(200);
@@ -394,12 +402,29 @@ function ChatThread({ conversationId }: { conversationId: string }) {
 
   const send = async () => {
     const text = body.trim();
-    if (!text || !employee?.id) return;
+    if ((!text && attachments.length === 0) || !employee?.id) return;
     setBody("");
+    const atts = attachments;
+    setAttachments([]);
     const { error } = await supabase.from("messages").insert({
-      conversation_id: conversationId, sender_id: employee.id, body: text, status: "sent",
+      conversation_id: conversationId, sender_id: employee.id, body: text, status: "sent", attachments: atts,
     });
-    if (error) { toast.error(error.message); setBody(text); }
+    if (error) { toast.error(error.message); setBody(text); setAttachments(atts); }
+  };
+
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    const files = Array.from(e.clipboardData.files);
+    if (files.length > 0) {
+      e.preventDefault();
+      const toastId = toast.loading("Uploading pasted file...");
+      try {
+        const uploaded = await uploadFiles(files, { kind: "conversation", id: conversationId });
+        setAttachments((prev) => [...prev, ...uploaded]);
+        toast.success("File uploaded", { id: toastId });
+      } catch (err: any) {
+        toast.error(err.message || "Upload failed", { id: toastId });
+      }
+    }
   };
 
   return (
@@ -407,6 +432,16 @@ function ChatThread({ conversationId }: { conversationId: string }) {
       {/* Static header bar at the top */}
       <div className="flex items-center justify-between px-4 py-3 border-b bg-card text-card-foreground shadow-sm">
         <div className="flex items-center gap-3 min-w-0">
+          {onBack && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 md:hidden shrink-0"
+              onClick={onBack}
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          )}
           <Avatar className="h-9 w-9 border">
             <AvatarFallback className="bg-primary text-primary-foreground font-semibold">{initials(chatTitle)}</AvatarFallback>
           </Avatar>
@@ -439,6 +474,7 @@ function ChatThread({ conversationId }: { conversationId: string }) {
                   : "bg-card text-card-foreground border-border/50 rounded-tl-none pl-3 pr-4"
               }`}>
                 <div className="leading-relaxed">{renderMessageBody(m.body, mine)}</div>
+                <AttachmentList attachments={(m.attachments ?? []) as ChatAttachment[]} />
                 <div className="text-[10px] mt-1.5 flex items-center justify-end select-none gap-1 opacity-70">
                   {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                   {mine && (
@@ -458,15 +494,31 @@ function ChatThread({ conversationId }: { conversationId: string }) {
         })}
         {!isLoading && messages.length === 0 && <p className="text-center text-sm text-muted-foreground py-10">Say hello 👋</p>}
       </div>
-      <div className="border-t p-3 flex gap-2 bg-card shadow-inner">
-        <MentionInput 
-          value={body} 
-          onChange={setBody} 
-          onSubmit={send} 
-          placeholder="Type a message… use @ to mention" 
-          maxLength={4000} 
+      <div className="border-t p-3 space-y-2 bg-card shadow-inner" onPaste={handlePaste}>
+        <PendingAttachmentList
+          attachments={attachments}
+          onRemove={async (att) => {
+            await supabase.storage.from("chat-attachments").remove([att.path]);
+            setAttachments((prev) => prev.filter((a) => a.path !== att.path));
+          }}
         />
-        <Button onClick={send} disabled={!body.trim()}><Send className="h-4 w-4" /></Button>
+        <div className="flex gap-2 items-center">
+          <MentionInput 
+            value={body} 
+            onChange={setBody} 
+            onSubmit={send} 
+            placeholder="Type a message… use @ to mention" 
+            maxLength={4000} 
+          />
+          <AttachmentPicker
+            value={attachments}
+            onChange={setAttachments}
+            scope={{ kind: "conversation", id: conversationId }}
+          />
+          <Button onClick={send} disabled={!body.trim() && attachments.length === 0} className="shrink-0">
+            <Send className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
     </>
   );

@@ -1,7 +1,6 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Bold, Italic, Heading1, Heading2, List, Code } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -96,15 +95,6 @@ export const MentionInput = forwardRef<MentionInputHandle, {
           ))}
         </div>
       )}
-      <div className="flex items-center gap-1 mb-1 text-muted-foreground">
-        <button type="button" title="Bold (Ctrl+B)" onClick={() => wrap("**")} className="p-1 hover:text-foreground"><Bold className="h-3.5 w-3.5" /></button>
-        <button type="button" title="Italic (Ctrl+I)" onClick={() => wrap("*")} className="p-1 hover:text-foreground"><Italic className="h-3.5 w-3.5" /></button>
-        <button type="button" title="Heading 1" onClick={() => prefix("# ")} className="p-1 hover:text-foreground"><Heading1 className="h-3.5 w-3.5" /></button>
-        <button type="button" title="Heading 2" onClick={() => prefix("## ")} className="p-1 hover:text-foreground"><Heading2 className="h-3.5 w-3.5" /></button>
-        <button type="button" title="Bullet list" onClick={() => prefix("- ")} className="p-1 hover:text-foreground"><List className="h-3.5 w-3.5" /></button>
-        <button type="button" title="Code" onClick={() => wrap("`")} className="p-1 hover:text-foreground"><Code className="h-3.5 w-3.5" /></button>
-        <span className="ml-auto text-[10px]">Shift+Enter for new line · **bold** *italic* # heading</span>
-      </div>
       <Textarea
         ref={inputRef}
         value={value}

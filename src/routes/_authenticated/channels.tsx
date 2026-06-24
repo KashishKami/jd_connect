@@ -1,4 +1,4 @@
-import { formatDate, formatDateTime } from "@/lib/utils";
+import { formatDate, formatDateTime, cn } from "@/lib/utils";
 import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -40,11 +40,12 @@ import {
   Users,
   MessageSquare,
   Info,
+  ArrowLeft,
 } from "lucide-react";
 import { toast } from "sonner";
 import { MentionInput, renderMessageBody } from "@/components/MentionInput";
 import { MessageReactions } from "@/components/MessageReactions";
-import { AttachmentPicker, AttachmentList, type ChatAttachment } from "@/components/ChatAttachments";
+import { AttachmentPicker, AttachmentList, PendingAttachmentList, type ChatAttachment, uploadFiles } from "@/components/ChatAttachments";
 import { ThreadPanel } from "@/components/ThreadPanel";
 
 export const Route = createFileRoute("/_authenticated/channels")({
@@ -257,9 +258,14 @@ export function ChannelsPage({ initialChannelId }: { initialChannelId?: string }
     );
   };
 
+  const handleBack = () => {
+    setActiveId(null);
+    void navigate({ to: "/communication", search: { section: "channels" } });
+  };
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-[380px_1fr] gap-4 h-[calc(100vh-8rem)]">
-      <Card className="flex flex-col">
+      <Card className={cn("flex flex-col", activeId ? "hidden md:flex" : "flex")}>
         <div className="p-3 border-b flex items-center justify-between">
           <h2 className="font-semibold">Channels</h2>
           <div className="flex items-center gap-1">
@@ -285,9 +291,9 @@ export function ChannelsPage({ initialChannelId }: { initialChannelId?: string }
           )}
         </div>
       </Card>
-      <Card className="flex flex-col overflow-hidden">
+      <Card className={cn("flex flex-col overflow-hidden", activeId ? "flex" : "hidden md:flex")}>
         {activeId ? (
-          <ChannelThread channelId={activeId} />
+          <ChannelThread channelId={activeId} onBack={handleBack} />
         ) : (
           <div className="flex-1 grid place-items-center text-muted-foreground text-sm">Select a channel</div>
         )}
@@ -296,7 +302,7 @@ export function ChannelsPage({ initialChannelId }: { initialChannelId?: string }
   );
 }
 
-function ChannelThread({ channelId }: { channelId: string }) {
+function ChannelThread({ channelId, onBack }: { channelId: string; onBack?: () => void }) {
   const { employee, isAdmin, hasRole } = useAuth();
   const { can } = usePermissions();
   const qc = useQueryClient();
@@ -304,6 +310,7 @@ function ChannelThread({ channelId }: { channelId: string }) {
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [threadParentId, setThreadParentId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const lastScrollChannelId = useRef<string | null>(null);
   const canModerate = isAdmin || hasRole("manager") || hasRole("team_leader") || can("channels.moderate");
 
   // Membership check (drives whether messages render or a "request to join" panel)
@@ -429,8 +436,18 @@ function ChannelThread({ channelId }: { channelId: string }) {
   }, [channelId, employee?.id, messages.length, qc, membership]);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages.length]);
+    if (!scrollRef.current) return;
+    if (lastScrollChannelId.current !== channelId) {
+      // Instant scroll on switching channel
+      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "auto" });
+      if (messages.length > 0) {
+        lastScrollChannelId.current = channelId;
+      }
+    } else {
+      // Smooth scroll for subsequent message updates
+      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    }
+  }, [messages.length, channelId]);
 
   const send = async () => {
     const text = body.trim();
@@ -445,6 +462,21 @@ function ChannelThread({ channelId }: { channelId: string }) {
       toast.error(error.message);
       setBody(text);
       setAttachments(atts);
+    }
+  };
+
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    const files = Array.from(e.clipboardData.files);
+    if (files.length > 0) {
+      e.preventDefault();
+      const toastId = toast.loading("Uploading pasted file...");
+      try {
+        const uploaded = await uploadFiles(files, { kind: "channel", id: channelId });
+        setAttachments((prev) => [...prev, ...uploaded]);
+        toast.success("File uploaded", { id: toastId });
+      } catch (err: any) {
+        toast.error(err.message || "Upload failed", { id: toastId });
+      }
     }
   };
 
@@ -482,6 +514,16 @@ function ChannelThread({ channelId }: { channelId: string }) {
         {/* Static header bar at the top */}
         <div className="flex items-center justify-between px-4 py-3 border-b bg-card text-card-foreground shadow-sm">
           <div className="flex items-center gap-3 min-w-0">
+            {onBack && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 md:hidden shrink-0"
+                onClick={onBack}
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            )}
             <div className="h-9 w-9 rounded-full bg-primary/10 text-primary grid place-items-center shrink-0 border border-primary/20">
               <Hash className="h-5 w-5" />
             </div>
@@ -574,18 +616,15 @@ function ChannelThread({ channelId }: { channelId: string }) {
           })}
           {!isThreadLoading && messages.length === 0 && <p className="text-center text-sm text-muted-foreground py-10">No messages yet.</p>}
         </div>
-        <div className="border-t p-3 space-y-2 bg-card shadow-inner">
-          {attachments.length > 0 && (
-            <div className="px-1">
-              <AttachmentList attachments={attachments} />
-            </div>
-          )}
-          <div className="flex gap-2 items-end">
-            <AttachmentPicker
-              value={attachments}
-              onChange={setAttachments}
-              scope={{ kind: "channel", id: channelId }}
-            />
+        <div className="border-t p-3 space-y-2 bg-card shadow-inner" onPaste={handlePaste}>
+          <PendingAttachmentList
+            attachments={attachments}
+            onRemove={async (att) => {
+              await supabase.storage.from("chat-attachments").remove([att.path]);
+              setAttachments((prev) => prev.filter((a) => a.path !== att.path));
+            }}
+          />
+          <div className="flex gap-2 items-center">
             <MentionInput
               value={body}
               onChange={setBody}
@@ -593,7 +632,12 @@ function ChannelThread({ channelId }: { channelId: string }) {
               placeholder="Message channel… use @ to mention"
               maxLength={4000}
             />
-            <Button onClick={send} disabled={!body.trim() && attachments.length === 0}>
+            <AttachmentPicker
+              value={attachments}
+              onChange={setAttachments}
+              scope={{ kind: "channel", id: channelId }}
+            />
+            <Button onClick={send} disabled={!body.trim() && attachments.length === 0} className="shrink-0">
               <Send className="h-4 w-4" />
             </Button>
           </div>
