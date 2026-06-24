@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { toast } from "sonner";
+import { checkIpRestriction } from "@/lib/ip-restriction.functions";
 import { SESSION_KEY } from "@/hooks/useAuth";
 import { z } from "zod";
 import { Apple, Monitor, Download } from "lucide-react";
@@ -127,6 +128,19 @@ function AuthPage() {
         toast.error(error?.message ?? "Sign-in failed");
         return;
       }
+
+      // Check IP restriction before creating a session to avoid invalidating other devices
+      try {
+        const ipCheck = await checkIpRestriction();
+        if (!ipCheck.allowed) {
+          toast.error("Access denied: Your IP address is not whitelisted.");
+          await supabase.auth.signOut();
+          return;
+        }
+      } catch (ipErr) {
+        console.error("IP check failed during login:", ipErr);
+      }
+
       // Record single active session
       const sid = crypto.randomUUID();
       await supabase.from("employee_sessions").update({ is_active: false }).eq("user_id", signIn.user.id);

@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
+import { createFileRoute, Outlet, redirect, isRedirect } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -7,12 +7,40 @@ import { HeaderActions } from "@/components/HeaderActions";
 import { AppFooter } from "@/components/AppFooter";
 import { ProfileCompletionDialog } from "@/components/ProfileCompletionDialog";
 import { ChatNotifier } from "@/components/ChatNotifier";
+import { checkIpRestriction } from "@/lib/ip-restriction.functions";
+
+// Cache the IP check per session, keyed by the active userId.
+// This prevents reusing a cached "allowed" state when switching user sessions.
+let ipCheckPromise: Promise<{ allowed: boolean }> | null = null;
+let cachedUserId: string | null = null;
+
+function getIpCheck(userId: string) {
+  if (!ipCheckPromise || cachedUserId !== userId) {
+    cachedUserId = userId;
+    ipCheckPromise = checkIpRestriction().catch((e) => {
+      ipCheckPromise = null; // allow retry on next navigation
+      cachedUserId = null;
+      throw e;
+    }) as Promise<{ allowed: boolean }>;
+  }
+  return ipCheckPromise;
+}
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async () => {
     const { data, error } = await supabase.auth.getUser();
     if (error || !data.user) throw redirect({ to: "/auth" });
+    // IP allowlist check (admins/super admins bypass server-side)
+    try {
+      const ipCheck = await getIpCheck(data.user.id);
+      console.log("[IP Check Client] Allowed:", ipCheck.allowed, "Check Result:", ipCheck);
+      if (!ipCheck.allowed) throw redirect({ to: "/ip-blocked" });
+    } catch (e) {
+      if (isRedirect(e)) throw e;
+      // network/other error — fail open to avoid lockout
+      console.error("IP check failed:", e);
+    }
     // Block non-approved accounts from accessing the app
     const { data: emp } = await supabase
       .from("employees")

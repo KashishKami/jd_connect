@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as PendingApprovalRouteImport } from './routes/pending-approval'
+import { Route as IpBlockedRouteImport } from './routes/ip-blocked'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
@@ -44,6 +45,7 @@ import { Route as AuthenticatedAdminShiftsRouteImport } from './routes/_authenti
 import { Route as AuthenticatedAdminSalesSourcesRouteImport } from './routes/_authenticated/admin.sales-sources'
 import { Route as AuthenticatedAdminRolesRouteImport } from './routes/_authenticated/admin.roles'
 import { Route as AuthenticatedAdminKnowledgeRouteImport } from './routes/_authenticated/admin.knowledge'
+import { Route as AuthenticatedAdminIpRestrictionsRouteImport } from './routes/_authenticated/admin.ip-restrictions'
 import { Route as AuthenticatedAdminHolidaysRouteImport } from './routes/_authenticated/admin.holidays'
 import { Route as AuthenticatedAdminEmployeesRouteImport } from './routes/_authenticated/admin.employees'
 import { Route as AuthenticatedAdminDepartmentsRouteImport } from './routes/_authenticated/admin.departments'
@@ -63,6 +65,11 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
 const PendingApprovalRoute = PendingApprovalRouteImport.update({
   id: '/pending-approval',
   path: '/pending-approval',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IpBlockedRoute = IpBlockedRouteImport.update({
+  id: '/ip-blocked',
+  path: '/ip-blocked',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
@@ -240,6 +247,12 @@ const AuthenticatedAdminKnowledgeRoute =
     path: '/admin/knowledge',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedAdminIpRestrictionsRoute =
+  AuthenticatedAdminIpRestrictionsRouteImport.update({
+    id: '/admin/ip-restrictions',
+    path: '/admin/ip-restrictions',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedAdminHolidaysRoute =
   AuthenticatedAdminHolidaysRouteImport.update({
     id: '/admin/holidays',
@@ -274,6 +287,7 @@ const AuthenticatedAdminBreaksRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/ip-blocked': typeof IpBlockedRoute
   '/pending-approval': typeof PendingApprovalRoute
   '/reset-password': typeof ResetPasswordRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
@@ -293,6 +307,7 @@ export interface FileRoutesByFullPath {
   '/admin/departments': typeof AuthenticatedAdminDepartmentsRoute
   '/admin/employees': typeof AuthenticatedAdminEmployeesRoute
   '/admin/holidays': typeof AuthenticatedAdminHolidaysRoute
+  '/admin/ip-restrictions': typeof AuthenticatedAdminIpRestrictionsRoute
   '/admin/knowledge': typeof AuthenticatedAdminKnowledgeRoute
   '/admin/roles': typeof AuthenticatedAdminRolesRoute
   '/admin/sales-sources': typeof AuthenticatedAdminSalesSourcesRoute
@@ -315,6 +330,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/ip-blocked': typeof IpBlockedRoute
   '/pending-approval': typeof PendingApprovalRoute
   '/reset-password': typeof ResetPasswordRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
@@ -332,6 +348,7 @@ export interface FileRoutesByTo {
   '/admin/departments': typeof AuthenticatedAdminDepartmentsRoute
   '/admin/employees': typeof AuthenticatedAdminEmployeesRoute
   '/admin/holidays': typeof AuthenticatedAdminHolidaysRoute
+  '/admin/ip-restrictions': typeof AuthenticatedAdminIpRestrictionsRoute
   '/admin/knowledge': typeof AuthenticatedAdminKnowledgeRoute
   '/admin/roles': typeof AuthenticatedAdminRolesRoute
   '/admin/sales-sources': typeof AuthenticatedAdminSalesSourcesRoute
@@ -356,6 +373,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/ip-blocked': typeof IpBlockedRoute
   '/pending-approval': typeof PendingApprovalRoute
   '/reset-password': typeof ResetPasswordRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
@@ -375,6 +393,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/departments': typeof AuthenticatedAdminDepartmentsRoute
   '/_authenticated/admin/employees': typeof AuthenticatedAdminEmployeesRoute
   '/_authenticated/admin/holidays': typeof AuthenticatedAdminHolidaysRoute
+  '/_authenticated/admin/ip-restrictions': typeof AuthenticatedAdminIpRestrictionsRoute
   '/_authenticated/admin/knowledge': typeof AuthenticatedAdminKnowledgeRoute
   '/_authenticated/admin/roles': typeof AuthenticatedAdminRolesRoute
   '/_authenticated/admin/sales-sources': typeof AuthenticatedAdminSalesSourcesRoute
@@ -399,6 +418,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/ip-blocked'
     | '/pending-approval'
     | '/reset-password'
     | '/sitemap.xml'
@@ -418,6 +438,7 @@ export interface FileRouteTypes {
     | '/admin/departments'
     | '/admin/employees'
     | '/admin/holidays'
+    | '/admin/ip-restrictions'
     | '/admin/knowledge'
     | '/admin/roles'
     | '/admin/sales-sources'
@@ -440,6 +461,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/ip-blocked'
     | '/pending-approval'
     | '/reset-password'
     | '/sitemap.xml'
@@ -457,6 +479,7 @@ export interface FileRouteTypes {
     | '/admin/departments'
     | '/admin/employees'
     | '/admin/holidays'
+    | '/admin/ip-restrictions'
     | '/admin/knowledge'
     | '/admin/roles'
     | '/admin/sales-sources'
@@ -480,6 +503,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/ip-blocked'
     | '/pending-approval'
     | '/reset-password'
     | '/sitemap.xml'
@@ -499,6 +523,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/departments'
     | '/_authenticated/admin/employees'
     | '/_authenticated/admin/holidays'
+    | '/_authenticated/admin/ip-restrictions'
     | '/_authenticated/admin/knowledge'
     | '/_authenticated/admin/roles'
     | '/_authenticated/admin/sales-sources'
@@ -523,6 +548,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  IpBlockedRoute: typeof IpBlockedRoute
   PendingApprovalRoute: typeof PendingApprovalRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
@@ -550,6 +576,13 @@ declare module '@tanstack/react-router' {
       path: '/pending-approval'
       fullPath: '/pending-approval'
       preLoaderRoute: typeof PendingApprovalRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ip-blocked': {
+      id: '/ip-blocked'
+      path: '/ip-blocked'
+      fullPath: '/ip-blocked'
+      preLoaderRoute: typeof IpBlockedRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth': {
@@ -776,6 +809,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminKnowledgeRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/admin/ip-restrictions': {
+      id: '/_authenticated/admin/ip-restrictions'
+      path: '/admin/ip-restrictions'
+      fullPath: '/admin/ip-restrictions'
+      preLoaderRoute: typeof AuthenticatedAdminIpRestrictionsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/admin/holidays': {
       id: '/_authenticated/admin/holidays'
       path: '/admin/holidays'
@@ -858,6 +898,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAdminDepartmentsRoute: typeof AuthenticatedAdminDepartmentsRoute
   AuthenticatedAdminEmployeesRoute: typeof AuthenticatedAdminEmployeesRoute
   AuthenticatedAdminHolidaysRoute: typeof AuthenticatedAdminHolidaysRoute
+  AuthenticatedAdminIpRestrictionsRoute: typeof AuthenticatedAdminIpRestrictionsRoute
   AuthenticatedAdminKnowledgeRoute: typeof AuthenticatedAdminKnowledgeRoute
   AuthenticatedAdminRolesRoute: typeof AuthenticatedAdminRolesRoute
   AuthenticatedAdminSalesSourcesRoute: typeof AuthenticatedAdminSalesSourcesRoute
@@ -890,6 +931,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAdminDepartmentsRoute: AuthenticatedAdminDepartmentsRoute,
   AuthenticatedAdminEmployeesRoute: AuthenticatedAdminEmployeesRoute,
   AuthenticatedAdminHolidaysRoute: AuthenticatedAdminHolidaysRoute,
+  AuthenticatedAdminIpRestrictionsRoute: AuthenticatedAdminIpRestrictionsRoute,
   AuthenticatedAdminKnowledgeRoute: AuthenticatedAdminKnowledgeRoute,
   AuthenticatedAdminRolesRoute: AuthenticatedAdminRolesRoute,
   AuthenticatedAdminSalesSourcesRoute: AuthenticatedAdminSalesSourcesRoute,
@@ -913,6 +955,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  IpBlockedRoute: IpBlockedRoute,
   PendingApprovalRoute: PendingApprovalRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,

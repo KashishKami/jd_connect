@@ -19,6 +19,7 @@ import {
   Tag,
   BookOpen,
   Sparkles,
+  Globe,
 } from "lucide-react";
 import {
   Sidebar,
@@ -33,6 +34,7 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
@@ -77,6 +79,7 @@ const admin = [
   { title: "Sales Sources", url: "/admin/sales-sources", icon: Tag, perm: "admin.sales_sources" },
   { title: "Knowledge Admin", url: "/admin/knowledge", icon: BookOpen, perm: "admin.knowledge" },
   { title: "Roles & Permissions", url: "/admin/roles", icon: Shield, perm: "admin.roles" },
+  { title: "IP Restrictions", url: "/admin/ip-restrictions", icon: Globe, perm: "admin.roles" },
 ];
 
 export function AppSidebar() {
@@ -98,6 +101,13 @@ export function AppSidebar() {
   const unread = useCommUnread();
   const totalUnread = (unread.dm || 0) + (unread.channels || 0) + (unread.announcements || 0);
   const { can, isLoading: permsLoading } = usePermissions();
+
+  const { setOpenMobile, isMobile } = useSidebar();
+  const handleLinkClick = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
 
   return (
     <Sidebar collapsible="icon">
@@ -155,7 +165,7 @@ export function AppSidebar() {
                             <SidebarMenuSub>
                               <SidebarMenuSubItem>
                                 <SidebarMenuSubButton asChild isActive={active && (section === "dm" || (!section && path === "/communication") || path.startsWith("/chat"))}>
-                                  <Link to="/communication" search={{ section: "dm" }} className="flex items-center gap-2 w-full">
+                                  <Link to="/communication" search={{ section: "dm" }} className="flex items-center gap-2 w-full" onClick={handleLinkClick}>
                                     <MessageSquare className="h-4 w-4 shrink-0" />
                                     <span>Direct Messages</span>
                                     {unread.dm > 0 && (
@@ -168,7 +178,7 @@ export function AppSidebar() {
                               </SidebarMenuSubItem>
                               <SidebarMenuSubItem>
                                 <SidebarMenuSubButton asChild isActive={active && (section === "channels" || path.startsWith("/channels"))}>
-                                  <Link to="/communication" search={{ section: "channels" }} className="flex items-center gap-2 w-full">
+                                  <Link to="/communication" search={{ section: "channels" }} className="flex items-center gap-2 w-full" onClick={handleLinkClick}>
                                     <Hash className="h-4 w-4 shrink-0" />
                                     <span>Channels</span>
                                     {unread.channels > 0 && (
@@ -181,7 +191,7 @@ export function AppSidebar() {
                               </SidebarMenuSubItem>
                               <SidebarMenuSubItem>
                                 <SidebarMenuSubButton asChild isActive={active && section === "announcements"}>
-                                  <Link to="/communication" search={{ section: "announcements" }} className="flex items-center gap-2 w-full">
+                                  <Link to="/communication" search={{ section: "announcements" }} className="flex items-center gap-2 w-full" onClick={handleLinkClick}>
                                     <Megaphone className="h-4 w-4 shrink-0" />
                                     <span>News & Updates</span>
                                     {unread.announcements > 0 && (
@@ -201,7 +211,7 @@ export function AppSidebar() {
                   return (
                     <SidebarMenuItem key={item.url}>
                       <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
-                        <Link to={item.url}>
+                        <Link to={item.url} onClick={handleLinkClick}>
                           <item.icon />
                           <span>{item.title}</span>
                         </Link>
@@ -223,7 +233,7 @@ export function AppSidebar() {
                   .map((item) => (
                     <SidebarMenuItem key={item.url}>
                       <SidebarMenuButton asChild isActive={isActive(item.url)} tooltip={item.title}>
-                        <Link to={item.url}>
+                        <Link to={item.url} onClick={handleLinkClick}>
                           <item.icon />
                           <span>{item.title}</span>
                         </Link>
