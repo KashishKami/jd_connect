@@ -264,7 +264,7 @@ export function ChannelsPage({ initialChannelId }: { initialChannelId?: string }
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-[380px_1fr] gap-4 h-[calc(100vh-8rem)]">
+    <div className="grid grid-cols-1 md:grid-cols-[380px_1fr] gap-4 h-full">
       <Card className={cn("flex flex-col", activeId ? "hidden md:flex" : "flex")}>
         <div className="p-3 border-b flex items-center justify-between">
           <h2 className="font-semibold">Channels</h2>
@@ -1008,11 +1008,20 @@ function ManageMembersDialog({ channel, onChanged }: { channel: Channel; onChang
     queryKey: ["channel-members-profiles", channel.id, memberIds.sort().join(",")],
     enabled: open && memberIds.length > 0,
     queryFn: async () => {
-      const { data } = await supabase.from("employees").select("id, full_name, alias_name").in("id", memberIds);
-      return (data ?? []) as { id: string; full_name: string; alias_name: string | null }[];
+      const { data } = await supabase
+        .from("employees")
+        .select("id, full_name, alias_name, roles(key)")
+        .in("id", memberIds);
+      return (data ?? []) as any[];
     },
   });
   const nameById = new Map(memberProfiles.map((e) => [e.id, e.alias_name || e.full_name]));
+  const isAdminById = new Map(
+    memberProfiles.map((e) => [
+      e.id,
+      e.roles?.key === "admin" || e.roles?.key === "super_admin",
+    ]),
+  );
 
   const { data: allEmployees = [] } = useQuery({
     queryKey: ["all-employees-min"],
@@ -1085,9 +1094,15 @@ function ManageMembersDialog({ channel, onChanged }: { channel: Channel; onChang
                       </Badge>
                     )}
                   </div>
-                  <Button size="sm" variant="outline" onClick={() => remove(m.employee_id)}>
-                    <X className="h-3.5 w-3.5 mr-1" /> Remove
-                  </Button>
+                  {(!isAdminById.get(m.employee_id) || m.employee_id === employee?.id) ? (
+                    <Button size="sm" variant="outline" onClick={() => remove(m.employee_id)}>
+                      <X className="h-3.5 w-3.5 mr-1" /> Remove
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline" disabled title="Admins can only remove themselves">
+                      <Lock className="h-3.5 w-3.5 mr-1 text-muted-foreground" /> Locked
+                    </Button>
+                  )}
                 </div>
               ))}
             </div>

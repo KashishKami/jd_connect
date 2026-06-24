@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -41,6 +41,24 @@ function Page() {
   const { isAdmin } = useAuth();
   const canResetPassword = isAdmin;
   const [pwTarget, setPwTarget] = useState<EmpRow | null>(null);
+
+  const [q, setQ] = useState("");
+  const [dept, setDept] = useState<string>("all");
+  const [centre, setCentre] = useState<string>("all");
+  const [role, setRole] = useState<string>("all");
+  const [status, setStatus] = useState<string>("all");
+
+  const { data: filters } = useQuery({
+    queryKey: ["dir-filters"],
+    queryFn: async () => {
+      const [d, c, r] = await Promise.all([
+        supabase.from("departments").select("id, name").order("name"),
+        supabase.from("centres").select("id, name").order("name"),
+        supabase.from("roles").select("id, name").order("name"),
+      ]);
+      return { departments: d.data ?? [], centres: c.data ?? [], roles: r.data ?? [] };
+    },
+  });
 
   const EMP_COLS = "id, employee_code, full_name, alias_name, username, designation, employment_status, approval_status, profile_photo_url, joining_date, department_id, centre_id, role_id, shift_id, team_leader_id, manager_id, auth_user_id, profile_completed, created_at, updated_at, departments(name), centres(code), roles(name)";
   const { data: emps } = useQuery({
@@ -106,6 +124,24 @@ function Page() {
 
   const pendingCount = emps?.filter((e) => (e as EmpRow).approval_status === "pending").length ?? 0;
 
+  const filteredEmps = useMemo(() => {
+    return emps?.filter((e) => {
+      const sQ = q.trim().toLowerCase();
+      const nameMatch = !sQ ||
+        (e.full_name || "").toLowerCase().includes(sQ) ||
+        (e.alias_name || "").toLowerCase().includes(sQ) ||
+        (e.employee_code || "").toLowerCase().includes(sQ) ||
+        (e.email || "").toLowerCase().includes(sQ);
+
+      const deptMatch = dept === "all" || e.department_id === dept;
+      const centreMatch = centre === "all" || e.centre_id === centre;
+      const roleMatch = role === "all" || e.role_id === role;
+      const statusMatch = status === "all" || e.employment_status === status;
+
+      return nameMatch && deptMatch && centreMatch && roleMatch && statusMatch;
+    });
+  }, [emps, q, dept, centre, role, status]);
+
   return (
     <div className="max-w-7xl mx-auto space-y-4">
       <div className="flex justify-between items-center">
@@ -123,50 +159,99 @@ function Page() {
           </Dialog>
         )}
       </div>
+
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
+            <Input className="md:col-span-2" placeholder="Search name, ID, email…" value={q} onChange={(e) => setQ(e.target.value)} />
+            <Select value={dept} onValueChange={setDept}>
+              <SelectTrigger><SelectValue placeholder="Department" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All departments</SelectItem>
+                {filters?.departments.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={centre} onValueChange={setCentre}>
+              <SelectTrigger><SelectValue placeholder="Centre" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All centres</SelectItem>
+                {filters?.centres.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={role} onValueChange={setRole}>
+              <SelectTrigger><SelectValue placeholder="Role" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All roles</SelectItem>
+                {filters?.roles.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="suspended">Suspended</SelectItem>
+                <SelectItem value="resigned">Resigned</SelectItem>
+                <SelectItem value="terminated">Terminated</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </CardContent>
+      </Card>
+
       <Card><CardContent className="p-0"><Table>
         <TableHeader><TableRow>
           <TableHead>ID</TableHead><TableHead>Name</TableHead><TableHead>Email</TableHead>
           <TableHead>Department</TableHead><TableHead>Centre</TableHead><TableHead>Role</TableHead>
           <TableHead>Status</TableHead><TableHead>Approval</TableHead><TableHead></TableHead>
         </TableRow></TableHeader>
-        <TableBody>{emps?.map((e) => (
-          <TableRow key={e.id}>
-            <TableCell className="font-mono text-xs">{e.employee_code}</TableCell>
-            <TableCell>
-              <Link to="/employees/$id" params={{ id: e.id }} className="hover:underline font-medium">
-                {e.alias_name || e.full_name}
-              </Link>
-              {e.alias_name && <div className="text-[10px] text-muted-foreground">{e.full_name}</div>}
-            </TableCell>
-            <TableCell className="text-xs">{e.email}</TableCell>
-            <TableCell>{(e.departments as { name: string } | null)?.name ?? "—"}</TableCell>
-            <TableCell>{(e.centres as { code: string } | null)?.code ?? "—"}</TableCell>
-            <TableCell>{(e.roles as { name: string } | null)?.name ?? "—"}</TableCell>
-            <TableCell className="capitalize">{e.employment_status}</TableCell>
-            <TableCell>
-              {(() => {
-                const a = (e as EmpRow).approval_status ?? "approved";
-                const cls = a === "approved" ? "bg-emerald-500/10 text-emerald-700"
-                  : a === "pending" ? "bg-amber-500/10 text-amber-700"
-                  : "bg-destructive/10 text-destructive";
-                return <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ${cls}`}>{a}</span>;
-              })()}
-            </TableCell>
-            <TableCell className="flex gap-1">
-              {canApprove && (e as EmpRow).approval_status !== "approved" && (
-                <Button size="sm" variant="default" onClick={() => approve.mutate(e.id)} disabled={approve.isPending}>Approve</Button>
-              )}
-              {canApprove && (e as EmpRow).approval_status === "pending" && (
-                <Button size="sm" variant="outline" onClick={() => reject.mutate(e.id)} disabled={reject.isPending}>Reject</Button>
-              )}
-              {canEdit && <Button size="sm" variant="outline" onClick={() => { setEditing(e as EmpRow); setOpen(true); }}>Edit</Button>}
-              {canResetPassword && (
-                <Button size="sm" variant="outline" onClick={() => setPwTarget(e as EmpRow)}>Password</Button>
-              )}
-              {canDelete && <DeleteRowButton entity="employee" id={e.id} label={e.full_name} invalidateKeys={[["admin-employees"]]} alreadyTerminated={e.employment_status === "terminated"} />}
-            </TableCell>
-          </TableRow>
-        ))}</TableBody>
+        <TableBody>
+          {filteredEmps?.map((e) => (
+            <TableRow key={e.id}>
+              <TableCell className="font-mono text-xs">{e.employee_code}</TableCell>
+              <TableCell>
+                <Link to="/employees/$id" params={{ id: e.id }} className="hover:underline font-medium">
+                  {e.alias_name || e.full_name}
+                </Link>
+                {e.alias_name && <div className="text-[10px] text-muted-foreground">{e.full_name}</div>}
+              </TableCell>
+              <TableCell className="text-xs">{e.email}</TableCell>
+              <TableCell>{(e.departments as { name: string } | null)?.name ?? "—"}</TableCell>
+              <TableCell>{(e.centres as { code: string } | null)?.code ?? "—"}</TableCell>
+              <TableCell>{(e.roles as { name: string } | null)?.name ?? "—"}</TableCell>
+              <TableCell className="capitalize">{e.employment_status}</TableCell>
+              <TableCell>
+                {(() => {
+                  const a = (e as EmpRow).approval_status ?? "approved";
+                  const cls = a === "approved" ? "bg-emerald-500/10 text-emerald-700"
+                    : a === "pending" ? "bg-amber-500/10 text-amber-700"
+                    : "bg-destructive/10 text-destructive";
+                  return <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ${cls}`}>{a}</span>;
+                })()}
+              </TableCell>
+              <TableCell className="flex gap-1">
+                {canApprove && (e as EmpRow).approval_status !== "approved" && (
+                  <Button size="sm" variant="default" onClick={() => approve.mutate(e.id)} disabled={approve.isPending}>Approve</Button>
+                )}
+                {canApprove && (e as EmpRow).approval_status === "pending" && (
+                  <Button size="sm" variant="outline" onClick={() => reject.mutate(e.id)} disabled={reject.isPending}>Reject</Button>
+                )}
+                {canEdit && <Button size="sm" variant="outline" onClick={() => { setEditing(e as EmpRow); setOpen(true); }}>Edit</Button>}
+                {canResetPassword && (
+                  <Button size="sm" variant="outline" onClick={() => setPwTarget(e as EmpRow)}>Password</Button>
+                )}
+                {canDelete && <DeleteRowButton entity="employee" id={e.id} label={e.full_name} invalidateKeys={[["admin-employees"]]} alreadyTerminated={e.employment_status === "terminated"} />}
+              </TableCell>
+            </TableRow>
+          ))}
+          {filteredEmps && filteredEmps.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                No employees found
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
       </Table></CardContent></Card>
       <PasswordDialog target={pwTarget} onClose={() => setPwTarget(null)} />
     </div>

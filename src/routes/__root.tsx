@@ -78,7 +78,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { name: "viewport", content: "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" },
       { title: "JD Connect — Workforce Operating System" },
       { name: "description", content: "JD Connect is the internal workforce operating system for managing employees, attendance, breaks, sales performance, communication and company knowledge in one place." },
       { name: "author", content: "Lovable" },

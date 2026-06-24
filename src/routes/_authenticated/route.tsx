@@ -57,10 +57,10 @@ export const Route = createFileRoute("/_authenticated")({
 function AuthedLayout() {
   return (
     <SidebarProvider>
-      <div className="min-h-screen flex w-full bg-secondary/30">
+      <div className="h-screen h-[100dvh] flex w-full bg-secondary/30 overflow-hidden">
         <AppSidebar />
-        <div className="flex-1 flex flex-col min-w-0">
-          <header className="h-14 flex items-center gap-3 border-b bg-background px-4 sticky top-0 z-10">
+        <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+          <header className="h-14 flex items-center gap-3 border-b bg-background px-4 sticky top-0 z-10 shrink-0">
             <SidebarTrigger />
             <div className="h-6 w-px bg-border" />
             <div className="text-sm font-medium text-foreground">JD Connect</div>
@@ -68,7 +68,7 @@ function AuthedLayout() {
               <HeaderActions />
             </div>
           </header>
-          <main className="flex-1 p-4 sm:p-6 overflow-x-hidden">
+          <main className="flex-1 p-4 sm:p-6 overflow-y-auto min-h-0">
             <Outlet />
           </main>
           <AppFooter />

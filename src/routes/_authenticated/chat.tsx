@@ -189,7 +189,7 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-[320px_1fr] gap-4 h-[calc(100vh-8rem)]">
+    <div className="grid grid-cols-1 md:grid-cols-[320px_1fr] gap-4 h-full">
       <Card className={cn("flex flex-col", activeId ? "hidden md:flex" : "flex")}>
         <div className="p-3 border-b space-y-2">
           <div className="flex items-center justify-between">
@@ -304,7 +304,7 @@ function ChatThread({ conversationId, onBack }: { conversationId: string; onBack
   const chatTitle = useMemo(() => {
     if (!conversation) return "Loading...";
     if (conversation.type === "group") return conversation.title ?? "Group Chat";
-    
+
     // Direct chat
     const emp = otherParticipant?.employees;
     if (emp) return emp.alias_name || emp.full_name;
@@ -315,12 +315,12 @@ function ChatThread({ conversationId, onBack }: { conversationId: string; onBack
   const chatSubtitle = useMemo(() => {
     if (!conversation) return "";
     if (conversation.type === "group") return "Group Conversation";
-    
+
     // Direct chat
     const emp = otherParticipant?.employees;
     const code = emp?.employee_code || otherPublicProfile?.employee_code;
     const designation = emp?.designation;
-    
+
     const parts = [code, designation].filter(Boolean);
     return parts.join(" · ");
   }, [conversation, otherParticipant, otherPublicProfile]);
@@ -345,14 +345,14 @@ function ChatThread({ conversationId, onBack }: { conversationId: string; onBack
     const markRead = async () => {
       const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
       let isAppFocused = typeof document !== "undefined" && document.hasFocus() && document.visibilityState === "visible";
-      
+
       if (isTauri) {
         try {
           const { getCurrentWindow } = await import("@tauri-apps/api/window");
           const win = getCurrentWindow();
           const [focused, minimized] = await Promise.all([win.isFocused(), win.isMinimized()]);
           isAppFocused = focused && !minimized;
-        } catch {}
+        } catch { }
       }
 
       if (isAppFocused) {
@@ -468,11 +468,10 @@ function ChatThread({ conversationId, onBack }: { conversationId: string; onBack
           const mine = m.sender_id === employee?.id;
           return (
             <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-[75%] rounded-2xl py-2 text-sm shadow-sm border ${
-                mine
+              <div className={`max-w-[75%] rounded-2xl py-2 text-sm shadow-sm border ${mine
                   ? "bg-primary text-primary-foreground border-primary/20 rounded-tr-none pl-4 pr-2.5"
                   : "bg-card text-card-foreground border-border/50 rounded-tl-none pl-3 pr-4"
-              }`}>
+                }`}>
                 <div className="leading-relaxed">{renderMessageBody(m.body, mine)}</div>
                 <AttachmentList attachments={(m.attachments ?? []) as ChatAttachment[]} />
                 <div className="text-[10px] mt-1.5 flex items-center justify-end select-none gap-1 opacity-70">
@@ -503,12 +502,12 @@ function ChatThread({ conversationId, onBack }: { conversationId: string; onBack
           }}
         />
         <div className="flex gap-2 items-center">
-          <MentionInput 
-            value={body} 
-            onChange={setBody} 
-            onSubmit={send} 
-            placeholder="Type a message… use @ to mention" 
-            maxLength={4000} 
+          <MentionInput
+            value={body}
+            onChange={setBody}
+            onSubmit={send}
+            placeholder="Type a message… use @ to mention"
+            maxLength={4000}
           />
           <AttachmentPicker
             value={attachments}
@@ -529,7 +528,7 @@ function NewChatDialog({ onClose, onCreated }: { onClose: () => void; onCreated:
   const [q, setQ] = useState("");
   const { data: results = [] } = useQuery({
     queryKey: ["emp-search", q],
-      queryFn: async () => {
+    queryFn: async () => {
       const { data, error } = await supabase.rpc("search_employee_directory", { _q: q || undefined, _limit: 20 });
       if (error) throw error;
       return data ?? [];

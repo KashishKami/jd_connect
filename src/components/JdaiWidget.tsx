@@ -257,7 +257,7 @@ function WidgetChat({ sessionId }: { sessionId: string }) {
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask JD AI…"
             disabled={isBusy}
-            className="min-h-[44px] text-sm"
+            className="min-h-[44px] text-base md:text-sm"
           />
           <PromptInputFooter className="justify-end">
             <PromptInputSubmit status={status} disabled={!input.trim() || isBusy} />
