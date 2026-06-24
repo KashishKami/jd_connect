@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Send, Search, MessageSquarePlus, Circle, Check, CheckCheck, User, Info, ArrowLeft } from "lucide-react";
+import { Send, Search, MessageSquarePlus, Circle, Check, CheckCheck, User, Info, ArrowLeft, Pencil, X as XIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { MentionInput, renderMessageBody } from "@/components/MentionInput";
@@ -38,6 +38,8 @@ type Message = {
   sender_id: string;
   created_at: string;
   status: string;
+  edited_at?: string | null;
+  attachments?: any;
 };
 
 function initials(n: string) {
@@ -264,6 +266,8 @@ function ChatThread({ conversationId, onBack }: { conversationId: string; onBack
   const qc = useQueryClient();
   const [body, setBody] = useState("");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editBody, setEditBody] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastScrollConvId = useRef<string | null>(null);
 
@@ -330,7 +334,7 @@ function ChatThread({ conversationId, onBack }: { conversationId: string; onBack
     queryFn: async () => {
       const { data, error } = await supabase
         .from("messages")
-        .select("id, body, sender_id, created_at, status, attachments")
+        .select("id, body, sender_id, created_at, status, attachments, edited_at")
         .eq("conversation_id", conversationId)
         .order("created_at", { ascending: true })
         .limit(200);
@@ -412,6 +416,29 @@ function ChatThread({ conversationId, onBack }: { conversationId: string; onBack
     if (error) { toast.error(error.message); setBody(text); setAttachments(atts); }
   };
 
+  const startEdit = (m: Message) => {
+    setEditingId(m.id);
+    setEditBody(m.body);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditBody("");
+  };
+
+  const saveEdit = async (id: string) => {
+    const text = editBody.trim();
+    if (!text) return;
+    const { error } = await supabase
+      .from("messages")
+      .update({ body: text, edited_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) { toast.error(error.message); return; }
+    setEditingId(null);
+    setEditBody("");
+    qc.invalidateQueries({ queryKey: ["messages", conversationId] });
+  };
+
   const handlePaste = async (e: React.ClipboardEvent) => {
     const files = Array.from(e.clipboardData.files);
     if (files.length > 0) {
@@ -466,15 +493,66 @@ function ChatThread({ conversationId, onBack }: { conversationId: string; onBack
       <div ref={scrollRef} className="flex-1 overflow-auto p-4 space-y-3 bg-[#eef2f6] dark:bg-[#0b0f17]">
         {messages.map((m) => {
           const mine = m.sender_id === employee?.id;
+          const isEditing = editingId === m.id;
           return (
             <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-[75%] rounded-2xl py-2 text-sm shadow-sm border ${mine
+              <div className={`group relative max-w-[75%] rounded-2xl py-2 text-sm shadow-sm border ${
+                mine
                   ? "bg-primary text-primary-foreground border-primary/20 rounded-tr-none pl-4 pr-2.5"
                   : "bg-card text-card-foreground border-border/50 rounded-tl-none pl-3 pr-4"
-                }`}>
-                <div className="leading-relaxed">{renderMessageBody(m.body, mine)}</div>
+              }`}>
+                {/* Hover action bar — only for own messages */}
+                {mine && !isEditing && (
+                  <div className="absolute top-0 -translate-y-1/2 left-2 flex items-center gap-1 bg-background border shadow-sm px-1.5 py-0.5 rounded-full z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                    <button
+                      onClick={() => startEdit(m)}
+                      className="text-[10px] text-muted-foreground hover:text-foreground font-medium inline-flex items-center gap-0.5 cursor-pointer"
+                    >
+                      <Pencil className="h-3 w-3" />
+                      Edit
+                    </button>
+                  </div>
+                )}
+
+                {/* Message body — normal or edit mode */}
+                {isEditing ? (
+                  <div className="space-y-1.5">
+                    <textarea
+                      className="w-full min-w-[200px] bg-primary-foreground/10 text-primary-foreground border border-primary-foreground/30 rounded-lg px-2 py-1.5 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary-foreground/50"
+                      rows={3}
+                      value={editBody}
+                      onChange={(e) => setEditBody(e.target.value)}
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") cancelEdit();
+                        if ((e.ctrlKey || e.metaKey) && e.key === "Enter") void saveEdit(m.id);
+                      }}
+                    />
+                    <div className="flex items-center gap-1.5 justify-end">
+                      <button
+                        onClick={cancelEdit}
+                        className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-primary-foreground/10 hover:bg-primary-foreground/20 text-primary-foreground/80 transition-colors"
+                      >
+                        <XIcon className="h-3 w-3" /> Cancel
+                      </button>
+                      <button
+                        onClick={() => void saveEdit(m.id)}
+                        disabled={!editBody.trim()}
+                        className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-primary-foreground/20 hover:bg-primary-foreground/30 text-primary-foreground font-semibold disabled:opacity-40 transition-colors"
+                      >
+                        <Check className="h-3 w-3" /> Save
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="leading-relaxed">{renderMessageBody(m.body, mine)}</div>
+                )}
+
                 <AttachmentList attachments={(m.attachments ?? []) as ChatAttachment[]} />
                 <div className="text-[10px] mt-1.5 flex items-center justify-end select-none gap-1 opacity-70">
+                  {m.edited_at && (
+                    <span className="italic opacity-80">edited ·</span>
+                  )}
                   {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                   {mine && (
                     <span className="shrink-0">

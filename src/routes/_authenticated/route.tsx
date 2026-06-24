@@ -1,4 +1,5 @@
-import { createFileRoute, Outlet, redirect, isRedirect } from "@tanstack/react-router";
+import { createFileRoute, Outlet, redirect, isRedirect, useLocation } from "@tanstack/react-router";
+import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -55,6 +56,9 @@ export const Route = createFileRoute("/_authenticated")({
 });
 
 function AuthedLayout() {
+  const location = useLocation();
+  const isChatOrChannels = location.pathname.startsWith("/chat") || location.pathname.startsWith("/channels");
+
   return (
     <SidebarProvider>
       <div className="h-screen h-[100dvh] flex w-full bg-secondary/30 overflow-hidden">
@@ -68,10 +72,13 @@ function AuthedLayout() {
               <HeaderActions />
             </div>
           </header>
-          <main className="flex-1 p-4 sm:p-6 overflow-y-auto min-h-0">
+          <main className={cn(
+            "flex-1 min-h-0",
+            isChatOrChannels ? "p-3 md:p-4 overflow-hidden flex flex-col" : "p-4 sm:p-6 overflow-y-auto"
+          )}>
             <Outlet />
           </main>
-          <AppFooter />
+          {!isChatOrChannels && <AppFooter />}
         </div>
         <JdaiWidget />
         <ProfileCompletionDialog />

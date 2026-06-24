@@ -41,6 +41,7 @@ import {
   MessageSquare,
   Info,
   ArrowLeft,
+  PencilLine,
 } from "lucide-react";
 import { toast } from "sonner";
 import { MentionInput, renderMessageBody } from "@/components/MentionInput";
@@ -72,6 +73,7 @@ type Msg = {
   attachments?: ChatAttachment[] | null;
   parent_message_id?: string | null;
   reply_count?: number;
+  edited_at?: string | null;
 };
 
 type JoinRequest = {
@@ -309,6 +311,8 @@ function ChannelThread({ channelId, onBack }: { channelId: string; onBack?: () =
   const [body, setBody] = useState("");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [threadParentId, setThreadParentId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editBody, setEditBody] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastScrollChannelId = useRef<string | null>(null);
   const canModerate = isAdmin || hasRole("manager") || hasRole("team_leader") || can("channels.moderate");
@@ -342,7 +346,7 @@ function ChannelThread({ channelId, onBack }: { channelId: string; onBack?: () =
     queryFn: async () => {
       const { data, error } = await supabase
         .from("messages")
-        .select("id, body, sender_id, created_at, is_pinned, attachments, parent_message_id")
+        .select("id, body, sender_id, created_at, is_pinned, attachments, parent_message_id, edited_at")
         .eq("channel_id", channelId)
         .is("parent_message_id", null)
         .order("created_at", { ascending: true })
@@ -485,6 +489,29 @@ function ChannelThread({ channelId, onBack }: { channelId: string; onBack?: () =
     if (error) toast.error(error.message);
   };
 
+  const startEdit = (m: Msg) => {
+    setEditingId(m.id);
+    setEditBody(m.body);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditBody("");
+  };
+
+  const saveEdit = async (id: string) => {
+    const text = editBody.trim();
+    if (!text) return;
+    const { error } = await supabase
+      .from("messages")
+      .update({ body: text, edited_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) { toast.error(error.message); return; }
+    setEditingId(null);
+    setEditBody("");
+    qc.invalidateQueries({ queryKey: ["ch-messages", channelId] });
+  };
+
   if (membership === false) {
     return (
       <div className="flex-1 grid place-items-center p-6">
@@ -556,8 +583,9 @@ function ChannelThread({ channelId, onBack }: { channelId: string; onBack?: () =
         <div ref={scrollRef} className="flex-1 overflow-auto p-4 space-y-4 bg-[#eef2f6] dark:bg-[#0b0f17]">
           {messages.map((m) => {
             const mine = m.sender_id === employee?.id;
+            const isEditing = editingId === m.id;
             return (
-              <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+              <div key={m.id} className={`group flex ${mine ? "justify-end" : "justify-start"}`}>
                 <div className="flex flex-col max-w-[75%]">
                   {!mine && (
                     <div className="text-[11px] text-muted-foreground mb-1 px-1 flex items-center gap-2">
@@ -567,42 +595,94 @@ function ChannelThread({ channelId, onBack }: { channelId: string; onBack?: () =
                   )}
                   {mine && (
                     <div className="text-[11px] text-muted-foreground mb-1 px-1 flex items-center justify-end gap-2">
+                      {m.edited_at && <span className="italic opacity-70">edited ·</span>}
                       <span>{new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
                     </div>
                   )}
                   
-                  <div className={`group relative rounded-2xl py-2 px-3 text-sm shadow-sm border ${
+                  <div className={`relative rounded-2xl py-2 px-3 text-sm shadow-sm border ${
                     mine
                       ? "bg-primary text-primary-foreground border-primary/20 rounded-tr-none"
                       : "bg-card text-card-foreground border-border/50 rounded-tl-none"
                   }`}>
-                    <div className="leading-relaxed break-words">{renderMessageBody(m.body, mine)}</div>
+                    {/* Message body — normal or edit mode */}
+                    {isEditing ? (
+                      <div className="space-y-1.5">
+                        <textarea
+                          className="w-full min-w-[200px] bg-primary-foreground/10 text-primary-foreground border border-primary-foreground/30 rounded-lg px-2 py-1.5 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary-foreground/50"
+                          rows={3}
+                          value={editBody}
+                          onChange={(e) => setEditBody(e.target.value)}
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") cancelEdit();
+                            if ((e.ctrlKey || e.metaKey) && e.key === "Enter") void saveEdit(m.id);
+                          }}
+                        />
+                        <div className="flex items-center gap-1.5 justify-end">
+                          <button
+                            onClick={cancelEdit}
+                            className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-primary-foreground/10 hover:bg-primary-foreground/20 text-primary-foreground/80 transition-colors"
+                          >
+                            <X className="h-3 w-3" /> Cancel
+                          </button>
+                          <button
+                            onClick={() => void saveEdit(m.id)}
+                            disabled={!editBody.trim()}
+                            className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-primary-foreground/20 hover:bg-primary-foreground/30 text-primary-foreground font-semibold disabled:opacity-40 transition-colors"
+                          >
+                            <Check className="h-3 w-3" /> Save
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="leading-relaxed break-words">{renderMessageBody(m.body, mine)}</div>
+                        {!mine && m.edited_at && (
+                          <div className="text-[10px] italic opacity-60 mt-0.5">edited</div>
+                        )}
+                      </>
+                    )}
                     <AttachmentList attachments={(m.attachments ?? []) as ChatAttachment[]} />
                     <MessageReactions messageId={m.id} />
-                    
-                    {/* Hover Actions Bar */}
-                    <div className={`absolute top-0 -translate-y-1/2 flex items-center gap-1.5 bg-background border shadow-sm px-1.5 py-0.5 rounded-full z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-150 ${
-                      mine ? "left-2" : "right-2"
-                    }`}>
-                      {(mine || canModerate) && (
-                        <>
-                          <button
-                            onClick={() => togglePin(m)}
-                            className="text-[10px] text-muted-foreground hover:text-foreground font-medium cursor-pointer"
-                          >
-                            {m.is_pinned ? "Unpin" : "Pin"}
-                          </button>
-                          <span className="text-muted-foreground/30 text-[10px]">|</span>
-                        </>
-                      )}
-                      <button
-                        onClick={() => setThreadParentId(m.id)}
-                        className="text-[10px] text-muted-foreground hover:text-foreground font-medium inline-flex items-center gap-0.5 cursor-pointer"
-                      >
-                        <MessageSquare className="h-3 w-3" />
-                        Reply
-                      </button>
-                    </div>
+
+                    {/* Hover Actions Bar — floats above the bubble */}
+                    {!isEditing && (
+                      <div className={`absolute -top-7 flex items-center gap-1.5 bg-background border shadow-md px-2 py-1 rounded-full z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-150 ${
+                        mine ? "left-0" : "right-0"
+                      }`}>
+                        {mine && (
+                          <>
+                            <button
+                              onClick={() => startEdit(m)}
+                              className="text-[10px] text-muted-foreground hover:text-foreground font-medium inline-flex items-center gap-0.5 cursor-pointer"
+                            >
+                              <PencilLine className="h-3 w-3" />
+                              Edit
+                            </button>
+                            <span className="text-muted-foreground/30 text-[10px]">|</span>
+                          </>
+                        )}
+                        {(mine || canModerate) && (
+                          <>
+                            <button
+                              onClick={() => togglePin(m)}
+                              className="text-[10px] text-muted-foreground hover:text-foreground font-medium cursor-pointer"
+                            >
+                              {m.is_pinned ? "Unpin" : "Pin"}
+                            </button>
+                            <span className="text-muted-foreground/30 text-[10px]">|</span>
+                          </>
+                        )}
+                        <button
+                          onClick={() => setThreadParentId(m.id)}
+                          className="text-[10px] text-muted-foreground hover:text-foreground font-medium inline-flex items-center gap-0.5 cursor-pointer"
+                        >
+                          <MessageSquare className="h-3 w-3" />
+                          Reply
+                        </button>
+                      </div>
+                    )}
 
                     {m.is_pinned && (
                       <div className={`absolute -bottom-1.5 ${mine ? "-left-1.5" : "-right-1.5"} bg-background border rounded-full p-0.5 shadow-sm`}>
@@ -985,6 +1065,7 @@ function ManageJoinRequestsDialog() {
 }
 
 function ManageMembersDialog({ channel, onChanged }: { channel: Channel; onChanged: () => void }) {
+  const { employee } = useAuth();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
