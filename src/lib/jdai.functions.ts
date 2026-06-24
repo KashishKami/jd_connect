@@ -62,6 +62,18 @@ export const deleteConversation = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const renameConversation = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { id: string; title: string }) => input)
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase
+      .from("ai_conversations")
+      .update({ title: data.title })
+      .eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
 export const submitFeedback = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: { messageId: string; helpful: boolean; comment?: string }) => input)

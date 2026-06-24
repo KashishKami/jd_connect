@@ -5,8 +5,9 @@ import { DefaultChatTransport, type UIMessage } from "ai";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Bot, MessageSquarePlus, Trash2, FileText, ThumbsUp, ThumbsDown, Sparkles } from "lucide-react";
+import { Bot, MessageSquarePlus, Trash2, FileText, ThumbsUp, ThumbsDown, Sparkles, ArrowLeft, Edit2, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Link } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -36,6 +37,7 @@ import {
   getConversation,
   deleteConversation,
   submitFeedback,
+  renameConversation,
 } from "@/lib/jdai.functions";
 
 export const Route = createFileRoute("/_authenticated/jdai")({
@@ -57,18 +59,23 @@ function JDAIPage() {
   const getFn = useServerFn(getConversation);
   const deleteFn = useServerFn(deleteConversation);
   const feedbackFn = useServerFn(submitFeedback);
+  const renameFn = useServerFn(renameConversation);
 
   const { data: conversations = [] } = useQuery({
     queryKey: ["ai-conversations"],
     queryFn: () => listFn(),
+    staleTime: 60_000,           // treat as fresh for 60s — avoids flicker on tab switch
+    placeholderData: (prev) => prev, // keep old list visible while refetching
   });
 
   const [activeId, setActiveId] = useState<string | null>(null);
 
-  // pick first conversation when none selected
+  // pick first conversation when none selected (only on desktop/wider screens)
   useEffect(() => {
-    if (!activeId && conversations.length > 0) {
-      setActiveId(conversations[0].id);
+    if (typeof window !== "undefined" && window.innerWidth >= 768) {
+      if (!activeId && conversations.length > 0) {
+        setActiveId(conversations[0].id);
+      }
     }
   }, [activeId, conversations]);
 
@@ -78,11 +85,29 @@ function JDAIPage() {
     queryFn: async () => {
       if (!activeId) return [];
       const rows = await getFn({ data: { id: activeId } });
-      return rows.map((r): UIMessage => ({
-        id: r.id,
-        role: r.role as "user" | "assistant",
-        parts: [{ type: "text", text: r.content }],
-      }));
+      return rows.map((r): UIMessage => {
+        const parts: any[] = [];
+        if (Array.isArray(r.tool_calls)) {
+          parts.push(...(r.tool_calls as any[]));
+        }
+        const hasSearchDoc = parts.some((p) => p.type === "tool-search_documents");
+        if (!hasSearchDoc && Array.isArray(r.sources) && r.sources.length > 0) {
+          parts.push({
+            type: "tool-search_documents",
+            toolCallId: "mock-search",
+            state: "result",
+            output: { results: r.sources },
+          });
+        }
+        parts.push({ type: "text", text: r.content });
+
+        return {
+          id: r.id,
+          role: r.role as "user" | "assistant",
+          content: r.content,
+          parts,
+        };
+      });
     },
   });
 
@@ -102,12 +127,22 @@ function JDAIPage() {
     },
   });
 
+  const renameConv = useMutation({
+    mutationFn: ({ id, title }: { id: string; title: string }) => renameFn({ data: { id, title } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["ai-conversations"] });
+    },
+  });
+
+  const activeConversation = conversations.find((c) => c.id === activeId);
+  const activeTitle = activeConversation?.title ?? "New conversation";
+
   if (!__guard.isLoading && !__guard.allowed) return <AccessDenied perm="reports.ai_analytics" label="JD AI" />;
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)]">
       {/* Sidebar with conversations */}
-      <aside className="w-64 border-r flex flex-col bg-muted/30">
+      <aside className={cn("w-full md:w-64 border-r flex flex-col bg-muted/30", activeId ? "hidden md:flex" : "flex")}>
         <div className="p-3 border-b">
           <Button
             className="w-full"
@@ -129,20 +164,22 @@ function JDAIPage() {
             <div
               key={c.id}
               className={cn(
-                "group flex items-center gap-1 rounded-md px-2 py-1.5 text-sm cursor-pointer hover:bg-muted",
+                "group flex items-center justify-between gap-1 rounded-md px-2 py-1.5 text-sm cursor-pointer hover:bg-muted",
                 activeId === c.id && "bg-muted font-medium",
               )}
               onClick={() => setActiveId(c.id)}
             >
-              <Bot className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <span className="flex-1 truncate">{c.title || "Untitled"}</span>
+              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                <Bot className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <span className="flex-1 truncate">{c.title || "Untitled"}</span>
+              </div>
               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (confirm("Delete this conversation?")) delConv.mutate(c.id);
+                  if (confirm(`Delete conversation "${c.title || "Untitled"}"?`)) delConv.mutate(c.id);
                 }}
-                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive"
+                className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-muted-foreground hover:text-destructive shrink-0 transition-opacity ml-1"
                 aria-label="Delete"
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -153,13 +190,18 @@ function JDAIPage() {
       </aside>
 
       {/* Chat */}
-      <main className="flex-1 flex flex-col min-w-0">
+      <main className={cn("flex-1 flex flex-col min-w-0", activeId ? "flex" : "hidden md:flex")}>
         {activeId ? (
           <ChatWindow
             key={activeId}
             conversationId={activeId}
             initialMessages={initialMessages}
             loadingHistory={loadingMsgs}
+            title={activeTitle}
+            onRename={async (newTitle) => {
+              await renameConv.mutateAsync({ id: activeId, title: newTitle });
+            }}
+            onBack={() => setActiveId(null)}
             onFeedback={(messageId, helpful) =>
               feedbackFn({ data: { messageId, helpful } })
                 .then(() => toast.success("Thanks for your feedback"))
@@ -197,12 +239,39 @@ function ChatWindow({
   initialMessages,
   loadingHistory,
   onFeedback,
+  title,
+  onRename,
+  onBack,
 }: {
   conversationId: string;
   initialMessages: UIMessage[];
   loadingHistory: boolean;
   onFeedback: (messageId: string, helpful: boolean) => void;
+  title: string;
+  onRename: (newTitle: string) => Promise<void>;
+  onBack?: () => void;
 }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [tempTitle, setTempTitle] = useState(title);
+
+  useEffect(() => {
+    setTempTitle(title);
+  }, [title]);
+
+  const handleSaveTitle = async () => {
+    const trimmed = tempTitle.trim();
+    if (!trimmed || trimmed === title) {
+      setIsEditing(false);
+      return;
+    }
+    try {
+      await onRename(trimmed);
+      setIsEditing(false);
+    } catch (err: any) {
+      toast.error("Failed to rename conversation: " + err.message);
+    }
+  };
+
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
@@ -219,12 +288,18 @@ function ChatWindow({
     [conversationId],
   );
 
-  const { messages, sendMessage, status, error } = useChat({
+  const { messages, sendMessage, status, error, setMessages } = useChat({
     id: conversationId,
     messages: initialMessages,
     transport,
     onError: (e) => toast.error(e.message),
   });
+
+  useEffect(() => {
+    if (status !== "streaming" && status !== "submitted") {
+      setMessages(initialMessages);
+    }
+  }, [initialMessages, setMessages, status]);
 
   const [input, setInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -239,16 +314,110 @@ function ChatWindow({
     const text = input.trim();
     if (!text || isBusy) return;
     setInput("");
-    await sendMessage({ text });
+    
+    const isDefaultTitle = !title || title === "New conversation" || title === "Untitled";
+    void sendMessage({ text });
+
+    if (isDefaultTitle) {
+      const words = text.split(/\s+/).filter(Boolean);
+      const newTitle = words.slice(0, 6).join(" ") + (words.length > 6 ? "..." : "");
+      if (newTitle) {
+        try {
+          await onRename(newTitle);
+        } catch (err) {
+          console.error("Failed to auto-rename conversation:", err);
+        }
+      }
+    }
   };
 
   const handleSuggestion = async (text: string) => {
     if (isBusy) return;
-    await sendMessage({ text });
+
+    const isDefaultTitle = !title || title === "New conversation" || title === "Untitled";
+    void sendMessage({ text });
+
+    if (isDefaultTitle) {
+      const words = text.split(/\s+/).filter(Boolean);
+      const newTitle = words.slice(0, 6).join(" ") + (words.length > 6 ? "..." : "");
+      if (newTitle) {
+        try {
+          await onRename(newTitle);
+        } catch (err) {
+          console.error("Failed to auto-rename conversation:", err);
+        }
+      }
+    }
   };
 
   return (
     <>
+      {/* Top Header Bar */}
+      <div className="flex items-center justify-between px-4 py-3 border-b bg-card text-card-foreground shadow-sm shrink-0">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          {onBack && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 md:hidden shrink-0"
+              onClick={onBack}
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+          )}
+          
+          <div className="h-9 w-9 rounded-full bg-primary/10 grid place-items-center shrink-0">
+            <Bot className="h-5 w-5 text-primary" />
+          </div>
+
+          {isEditing ? (
+            <div className="flex items-center gap-2 max-w-sm flex-1">
+              <Input
+                value={tempTitle}
+                onChange={(e) => setTempTitle(e.target.value)}
+                className="h-8 text-sm"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSaveTitle();
+                  if (e.key === "Escape") {
+                    setTempTitle(title);
+                    setIsEditing(false);
+                  }
+                }}
+              />
+            </div>
+          ) : (
+            <div className="min-w-0 font-medium">
+              <div className="text-sm font-semibold truncate">{title || "Untitled"}</div>
+            </div>
+          )}
+        </div>
+
+        {/* Far Right Action Buttons */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {isEditing ? (
+            <>
+              <Button size="icon-sm" variant="ghost" className="h-8 w-8 text-green-600 hover:text-green-700" onClick={handleSaveTitle} title="Save">
+                <Check className="h-4 w-4" />
+              </Button>
+              <Button size="icon-sm" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => { setTempTitle(title); setIsEditing(false); }} title="Cancel">
+                <X className="h-4 w-4" />
+              </Button>
+            </>
+          ) : (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setIsEditing(true)}
+              title="Rename conversation"
+            >
+              <Edit2 className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+      </div>
+
       <Conversation className="flex-1">
         <ConversationContent>
           {loadingHistory && (

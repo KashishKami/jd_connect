@@ -25,6 +25,9 @@ import {
   PromptInputSubmit,
 } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
+import { useServerFn } from "@tanstack/react-start";
+import { useQueryClient } from "@tanstack/react-query";
+import { createConversation, renameConversation } from "@/lib/jdai.functions";
 
 const SUGGESTIONS = [
   "What were our total sales last week?",
@@ -110,19 +113,43 @@ export function JdaiWidget() {
 }
 
 function WidgetChat({ sessionId }: { sessionId: string }) {
+  const qc = useQueryClient();
+  const createFn = useServerFn(createConversation);
+  const renameFn = useServerFn(renameConversation);
+
+  // Lazily-created conversation ID — null until the first message is sent
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const conversationIdRef = useRef<string | null>(null);
+
+  /** Ensure a conversation exists in the DB, create one if not. Returns its id. */
+  const ensureConversation = async (): Promise<string> => {
+    if (conversationIdRef.current) return conversationIdRef.current;
+    const conv = await createFn({ data: { title: "New conversation" } });
+    conversationIdRef.current = conv.id;
+    setConversationId(conv.id);
+    qc.invalidateQueries({ queryKey: ["ai-conversations"] });
+    return conv.id;
+  };
+
   const transport = useMemo(
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
+        body: conversationId ? { conversationId } : {},
         fetch: async (input, init) => {
+          // Make sure a conversation exists before each request and inject its id
+          const convId = await ensureConversation();
+          const body = JSON.parse((init?.body as string) ?? "{}");
+          body.conversationId = convId;
           const { data } = await supabase.auth.getSession();
           const token = data.session?.access_token;
           const headers = new Headers(init?.headers);
           if (token) headers.set("Authorization", `Bearer ${token}`);
-          return fetch(input, { ...init, headers });
+          return fetch(input, { ...init, headers, body: JSON.stringify(body) });
         },
       }),
-    [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [conversationId],
   );
 
   const { messages, sendMessage, status, error } = useChat({
@@ -144,12 +171,31 @@ function WidgetChat({ sessionId }: { sessionId: string }) {
     const text = input.trim();
     if (!text || isBusy) return;
     setInput("");
-    await sendMessage({ text });
+    void sendMessage({ text });
+    // Auto-name the conversation from the first query
+    const convId = await ensureConversation();
+    if (messages.length === 0) {
+      const words = text.split(/\s+/).filter(Boolean);
+      const newTitle = words.slice(0, 6).join(" ") + (words.length > 6 ? "..." : "");
+      try {
+        await renameFn({ data: { id: convId, title: newTitle } });
+        qc.invalidateQueries({ queryKey: ["ai-conversations"] });
+      } catch { /* silent */ }
+    }
   };
 
   const handleSuggestion = async (text: string) => {
     if (isBusy) return;
-    await sendMessage({ text });
+    void sendMessage({ text });
+    const convId = await ensureConversation();
+    if (messages.length === 0) {
+      const words = text.split(/\s+/).filter(Boolean);
+      const newTitle = words.slice(0, 6).join(" ") + (words.length > 6 ? "..." : "");
+      try {
+        await renameFn({ data: { id: convId, title: newTitle } });
+        qc.invalidateQueries({ queryKey: ["ai-conversations"] });
+      } catch { /* silent */ }
+    }
   };
 
   return (

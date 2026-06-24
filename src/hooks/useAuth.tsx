@@ -81,17 +81,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user) return;
     const localId = localStorage.getItem(SESSION_KEY);
+    // If this device has no stored session token, skip enforcement entirely
+    // (e.g. old browser tab that predates this feature)
     if (!localId) return;
+
     const check = async () => {
-      const { data: ok } = await supabase.rpc("is_current_session", { _token: localId });
+      // Re-read localStorage each time — login on another tab updates it
+      const token = localStorage.getItem(SESSION_KEY);
+      if (!token) return; // token was cleared, don't self-kick
+      const { data: ok } = await supabase.rpc("is_current_session", { _token: token });
       if (ok === false) {
         await supabase.auth.signOut();
         localStorage.removeItem(SESSION_KEY);
         window.location.href = "/auth?reason=session-replaced";
       }
     };
+
+    // Delay the FIRST check by 5 seconds so the DB insert and localStorage.setItem
+    // from handleLogin are both committed before we query. Subsequent polls every 30s.
+    const firstTimer = setTimeout(() => {
+      void check();
+    }, 5_000);
     const t = setInterval(check, 30_000);
-    return () => clearInterval(t);
+    return () => {
+      clearTimeout(firstTimer);
+      clearInterval(t);
+    };
   }, [user]);
 
   // Presence heartbeat

@@ -69,14 +69,14 @@ function Page() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-4">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row gap-4 justify-between sm:items-center">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Globe className="h-6 w-6 text-primary" />
             IP Restrictions Allowlist
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Explicitly set which network IP addresses can access the application. Non-admin users outside this whitelist will be blocked.
+            Manage allowed IP networks. Non-admins outside these IPs are blocked.
           </p>
         </div>
         
