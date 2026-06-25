@@ -58,6 +58,7 @@ export const Route = createFileRoute("/_authenticated")({
 function AuthedLayout() {
   const location = useLocation();
   const isChatOrChannels = location.pathname.startsWith("/chat") || location.pathname.startsWith("/channels");
+  const isDashboard = location.pathname === "/dashboard" || location.pathname.startsWith("/dashboard");
 
   return (
     <SidebarProvider>
@@ -80,7 +81,7 @@ function AuthedLayout() {
           </main>
           {!isChatOrChannels && <AppFooter />}
         </div>
-        <JdaiWidget />
+        {isDashboard && <JdaiWidget />}
         <ProfileCompletionDialog />
         <ChatNotifier />
       </div>

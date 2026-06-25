@@ -466,6 +466,10 @@ function ChannelThread({ channelId, onBack }: { channelId: string; onBack?: () =
       toast.error(error.message);
       setBody(text);
       setAttachments(atts);
+    } else {
+      // Directly invalidate so the sender sees their message immediately,
+      // without waiting for the realtime subscription to fire.
+      void qc.invalidateQueries({ queryKey: ["ch-messages", channelId] });
     }
   };
 
