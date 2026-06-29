@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -44,6 +45,11 @@ function TeamBreaks() {
   const { employee, isAdmin, hasRole } = useAuth();
   const { can } = usePermissions();
   const qc = useQueryClient();
+  const [filterDate, setFilterDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [expandedEmps, setExpandedEmps] = useState<Record<string, boolean>>({});
+  const toggleEmpExpand = (empId: string) => {
+    setExpandedEmps(prev => ({ ...prev, [empId]: !prev[empId] }));
+  };
   // canManagePolicies: approve/reject break requests and manage break policy config
   const canManagePolicies = isAdmin || hasRole("manager") || can("breaks.policies_manage");
 
@@ -82,14 +88,17 @@ function TeamBreaks() {
 
   const { data: history = [] } = useQuery({
     enabled: teamIds.length > 0,
-    queryKey: ["team-break-history", teamIds],
+    queryKey: ["team-break-history", teamIds, filterDate],
     queryFn: async () => {
+      const startOfDay = new Date(`${filterDate}T00:00:00`).toISOString();
+      const endOfDay = new Date(`${filterDate}T23:59:59.999`).toISOString();
       const { data, error } = await supabase
         .from("break_records")
         .select("*, employee:employees(id, full_name, alias_name, employee_code), break_type:break_types(name)")
         .in("employee_id", teamIds)
-        .order("start_at", { ascending: false })
-        .limit(200);
+        .gte("start_at", startOfDay)
+        .lte("start_at", endOfDay)
+        .order("start_at", { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
@@ -111,6 +120,34 @@ function TeamBreaks() {
   });
 
   const exceeded = useMemo(() => history.filter((b: any) => b.status === "exceeded"), [history]);
+
+  const aggregatedHistory = useMemo(() => {
+    const groups: Record<string, {
+      employee: { id: string; full_name: string; alias_name: string | null; employee_code: string };
+      totalDuration: number;
+      breaksCount: number;
+      breaks: any[];
+    }> = {};
+
+    for (const b of history) {
+      const empId = b.employee?.id;
+      if (!empId) continue;
+      if (!groups[empId]) {
+        groups[empId] = {
+          employee: b.employee,
+          totalDuration: 0,
+          breaksCount: 0,
+          breaks: [],
+        };
+      }
+      const dur = b.duration_minutes ?? (b.status === "active" ? elapsedMin(b.start_at) : 0);
+      groups[empId].totalDuration += dur;
+      groups[empId].breaksCount += 1;
+      groups[empId].breaks.push(b);
+    }
+
+    return Object.values(groups).sort((a, b) => b.totalDuration - a.totalDuration);
+  }, [history]);
 
   const review = useMutation({
     mutationFn: async ({ id, status, notes }: { id: string; status: "approved" | "rejected"; notes: string }) => {
@@ -234,39 +271,110 @@ function TeamBreaks() {
         </TabsContent>
 
         <TabsContent value="history">
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Employee</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Start</TableHead>
-                    <TableHead>Duration</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {history.map((b: any) => (
-                    <TableRow key={b.id}>
-                      <TableCell>{b.employee?.alias_name || b.employee?.full_name}</TableCell>
-                      <TableCell>{b.break_type?.name}</TableCell>
-                      <TableCell>{formatDateTime(b.start_at)}</TableCell>
-                      <TableCell>{b.duration_minutes ?? "—"}</TableCell>
-                      <TableCell>{statusBadge(b.status)}</TableCell>
-                    </TableRow>
-                  ))}
-                  {history.length === 0 && (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3 bg-secondary/20 p-3 rounded-lg border">
+              <Label htmlFor="history-date" className="text-sm font-semibold">Filter by Date:</Label>
+              <Input
+                id="history-date"
+                type="date"
+                className="w-48 bg-background"
+                value={filterDate}
+                onChange={(e) => setFilterDate(e.target.value)}
+              />
+            </div>
+
+            <Card>
+              <CardContent className="p-0">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground py-6">
-                        No history
-                      </TableCell>
+                      <TableHead className="w-12"></TableHead>
+                      <TableHead>Employee</TableHead>
+                      <TableHead className="text-right">Number of Breaks</TableHead>
+                      <TableHead className="text-right">Total Duration</TableHead>
+                      <TableHead className="text-right w-[150px]">Actions</TableHead>
                     </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {aggregatedHistory.map((group: any) => {
+                      const isExpanded = !!expandedEmps[group.employee.id];
+                      return (
+                        <>
+                          <TableRow key={group.employee.id} className="hover:bg-muted/30">
+                            <TableCell>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0"
+                                onClick={() => toggleEmpExpand(group.employee.id)}
+                              >
+                                {isExpanded ? "▼" : "▶"}
+                              </Button>
+                            </TableCell>
+                            <TableCell className="font-medium">
+                              {group.employee.alias_name || group.employee.full_name}{" "}
+                              <span className="text-muted-foreground text-xs">({group.employee.employee_code})</span>
+                            </TableCell>
+                            <TableCell className="text-right">{group.breaksCount}</TableCell>
+                            <TableCell className="text-right font-mono font-medium">{group.totalDuration.toFixed(2)} min</TableCell>
+                            <TableCell className="text-right">
+                              <Button
+                                variant="link"
+                                size="sm"
+                                className="p-0 h-auto"
+                                onClick={() => toggleEmpExpand(group.employee.id)}
+                              >
+                                {isExpanded ? "Hide Details" : "Show Details"}
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                          {isExpanded && (
+                            <TableRow className="bg-muted/10 hover:bg-muted/10 border-t-0">
+                              <TableCell colSpan={5} className="p-4 pl-12">
+                                <div className="border rounded-lg bg-background overflow-hidden">
+                                  <Table>
+                                    <TableHeader className="bg-muted/40">
+                                      <TableRow>
+                                        <TableHead className="pl-6">Type</TableHead>
+                                        <TableHead>Start Time</TableHead>
+                                        <TableHead>End Time</TableHead>
+                                        <TableHead className="text-right">Duration</TableHead>
+                                        <TableHead>Status</TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {group.breaks.map((b: any) => (
+                                        <TableRow key={b.id}>
+                                          <TableCell className="pl-6 font-medium">{b.break_type?.name ?? "—"}</TableCell>
+                                          <TableCell>{formatDateTime(b.start_at)}</TableCell>
+                                          <TableCell>{b.end_at ? formatDateTime(b.end_at) : "—"}</TableCell>
+                                          <TableCell className="text-right font-mono">
+                                            {b.duration_minutes ? `${b.duration_minutes} min` : (b.status === "active" ? `${elapsedMin(b.start_at)} min (Active)` : "—")}
+                                          </TableCell>
+                                          <TableCell>{statusBadge(b.status)}</TableCell>
+                                        </TableRow>
+                                      ))}
+                                    </TableBody>
+                                  </Table>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </>
+                      );
+                    })}
+                    {aggregatedHistory.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                          No break history found for this date
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="requests">
