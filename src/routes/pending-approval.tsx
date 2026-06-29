@@ -14,18 +14,32 @@ export const Route = createFileRoute("/pending-approval")({
 function PendingApprovalPage() {
   const nav = useNavigate();
   const [email, setEmail] = useState<string>("");
-  const [status, setStatus] = useState<"pending" | "approved" | "rejected" | "unknown">("unknown");
+  const [status, setStatus] = useState<"unverified" | "pending" | "approved" | "rejected" | "unknown">("unknown");
 
   const check = async () => {
     const { data: u } = await supabase.auth.getUser();
     if (!u.user) { nav({ to: "/auth" }); return; }
     setEmail(u.user.email ?? "");
+
+    // If the user's email is now confirmed (they clicked the link), flip
+    // their status from 'unverified' → 'pending' so the admin can see them.
+    if (u.user.email_confirmed_at) {
+      const { data: rpcResult } = await supabase.rpc("confirm_my_email_and_request_approval");
+      // rpcResult will be: 'pending' | 'approved' | 'rejected' | 'unverified' | 'no_employee'
+      if (rpcResult === "approved") { nav({ to: "/dashboard" }); return; }
+      if (rpcResult === "pending" || rpcResult === "rejected") {
+        setStatus(rpcResult as "pending" | "rejected");
+        return;
+      }
+    }
+
+    // Fallback: read approval_status directly from employees table
     const { data: emp } = await supabase
       .from("employees")
       .select("approval_status")
       .eq("auth_user_id", u.user.id)
       .maybeSingle();
-    const s = (emp?.approval_status ?? "pending") as "pending" | "approved" | "rejected";
+    const s = (emp?.approval_status ?? "pending") as "unverified" | "pending" | "approved" | "rejected";
     setStatus(s);
     if (s === "approved") nav({ to: "/dashboard" });
   };
@@ -43,6 +57,7 @@ function PendingApprovalPage() {
   };
 
   const rejected = status === "rejected";
+  const unverified = status === "unverified";
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary via-primary to-sidebar p-4">
@@ -52,19 +67,21 @@ function PendingApprovalPage() {
             <Clock className="h-7 w-7" />
           </div>
           <CardTitle className="text-xl">
-            {rejected ? "Access denied" : "Admin approval waiting"}
+            {rejected ? "Access denied" : unverified ? "Verify your email" : "Admin approval waiting"}
           </CardTitle>
           <CardDescription>
             {rejected
               ? "Your account was not approved. Please contact your Super Admin."
+              : unverified
+              ? "Please check your inbox and click the \"Verify Email\" button to continue."
               : "Your email is verified. A Super Admin needs to approve your account before you can access JD Connect."}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {email && <p className="text-sm text-center text-muted-foreground">Signed in as <span className="font-medium text-foreground">{email}</span></p>}
           {!rejected && (
-            <Button variant="outline" className="w-full" onClick={() => { check(); toast.info("Checked again — still waiting"); }}>
-              Check again
+            <Button variant="outline" className="w-full" onClick={() => { check(); if (!unverified) toast.info("Checked again — still waiting"); }}>
+              {unverified ? "I've verified my email" : "Check again"}
             </Button>
           )}
           <Button variant="ghost" className="w-full" onClick={signOut}>Sign out</Button>

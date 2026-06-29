@@ -109,6 +109,8 @@ function TeamAttendance() {
     if (sp.to) setTo(sp.to);
   }, [sp.from, sp.to]);
 
+  const canViewAll = isAdmin || can("attendance.view_all");
+
   // canReview: approve/reject correction requests and leave requests
   const canReview = isAdmin || hasRole("manager") || can("attendance.correction_approve");
   // canRequestCorrection: submit a correction on behalf of a team member
@@ -117,10 +119,10 @@ function TeamAttendance() {
 
   const { data: team } = useQuery({
     enabled: !!employee?.id,
-    queryKey: ["my-team", employee?.id],
+    queryKey: ["my-team", employee?.id, canViewAll],
     queryFn: async () => {
       const q = supabase.from("employees").select("id, full_name, alias_name, employee_code").order("full_name");
-      if (isAdmin) return (await q).data ?? [];
+      if (canViewAll) return (await q).data ?? [];
       const { data } = await q.or(`manager_id.eq.${employee!.id},team_leader_id.eq.${employee!.id}`);
       return data ?? [];
     },
@@ -146,7 +148,7 @@ function TeamAttendance() {
 
   const { data: corrections } = useQuery({
     queryKey: ["corrections", teamIds],
-    enabled: teamIds.length > 0 || isAdmin,
+    enabled: teamIds.length > 0 || canViewAll,
     queryFn: async () => {
       const { data } = await supabase
         .from("attendance_corrections")
@@ -159,7 +161,7 @@ function TeamAttendance() {
 
   const { data: leaves } = useQuery({
     queryKey: ["team-leaves", teamIds],
-    enabled: teamIds.length > 0 || isAdmin,
+    enabled: teamIds.length > 0 || canViewAll,
     queryFn: async () => {
       const { data } = await supabase
         .from("leave_requests")
@@ -178,7 +180,7 @@ function TeamAttendance() {
       <div>
         <h1 className="text-2xl font-semibold">Team Attendance</h1>
         <p className="text-sm text-muted-foreground">
-          {isAdmin ? "All employees" : "Your team"} — review attendance, corrections and leaves.
+          {canViewAll ? "All employees" : "Your team"} — review attendance, corrections and leaves.
         </p>
       </div>
 

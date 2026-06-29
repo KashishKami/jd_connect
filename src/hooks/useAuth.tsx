@@ -114,7 +114,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!employee?.id) return;
     const beat = async (status: "online" | "away" = "online") => {
       await supabase.from("employee_presence").upsert({
-        employee_id: employee.id, status, last_seen_at: new Date().toISOString(),
+        employee_id: employee.id,
+        status,
+        last_seen_at: new Date().toISOString(),
       });
     };
     beat("online");
@@ -123,7 +125,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const onUnload = () => {
       // best-effort offline
       void supabase.from("employee_presence").upsert({
-        employee_id: employee.id, status: "offline", last_seen_at: new Date().toISOString(),
+        employee_id: employee.id,
+        status: "offline",
+        last_seen_at: new Date().toISOString(),
       });
     };
     document.addEventListener("visibilitychange", onVis);

@@ -1,19 +1,14 @@
-import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Smile } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const QUICK = ["👍", "❤️", "😂", "🎉", "🙏", "👀", "🔥", "✅"];
 
 type Reaction = { id: string; emoji: string; employee_id: string };
 
 export function MessageReactions({ messageId }: { messageId: string }) {
   const { employee } = useAuth();
   const qc = useQueryClient();
-  const [open, setOpen] = useState(false);
 
   const { data: reactions = [] } = useQuery<Reaction[]>({
     queryKey: ["reactions", messageId],
@@ -41,7 +36,6 @@ export function MessageReactions({ messageId }: { messageId: string }) {
       await supabase.from("message_reactions").insert({ message_id: messageId, employee_id: employee.id, emoji });
     }
     qc.invalidateQueries({ queryKey: ["reactions", messageId] });
-    setOpen(false);
   };
 
   return (
@@ -62,20 +56,6 @@ export function MessageReactions({ messageId }: { messageId: string }) {
           </button>
         );
       })}
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <button className="hidden group-hover:inline-flex items-center rounded-full border px-1.5 py-0.5 text-xs hover:bg-muted">
-            <Smile className="h-3 w-3" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-1" align="start">
-          <div className="flex gap-0.5">
-            {QUICK.map((e) => (
-              <button key={e} onClick={() => toggle(e)} className="text-lg p-1 hover:bg-muted rounded">{e}</button>
-            ))}
-          </div>
-        </PopoverContent>
-      </Popover>
     </div>
   );
 }

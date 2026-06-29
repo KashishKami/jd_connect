@@ -50,11 +50,11 @@ const signupSchema = z.object({
 });
 
 const ALLOWED_DOMAIN = "jdfusion.in";
-type Step = "auth" | "verify-signup" | "reset-request" | "verify-recovery" | "reset-password";
+type Step = "auth" | "check-email" | "reset-request" | "verify-recovery" | "reset-password";
 
-function AuthPage() {
+export function AuthPage() {
   const navigate = useNavigate();
-  const search = useSearch({ from: "/auth" });
+  const search = useSearch({ strict: false });
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<Step>("auth");
   const [pendingEmail, setPendingEmail] = useState("");
@@ -190,13 +190,10 @@ function AuthPage() {
         toast.info(`Heads up: ${ALLOWED_DOMAIN} accounts are preferred. Yours will still need Super Admin approval.`);
       }
       setPendingEmail(email);
-      setOtp("");
-      setStep("verify-signup");
-      // If Supabase auto-confirmed (rare in this config), skip OTP
       if (data.session) {
         navigate({ to: "/pending-approval" });
       } else {
-        toast.success("Check your email for a 6-digit verification code.");
+        setStep("check-email");
       }
     } finally {
       setLoading(false);
@@ -224,27 +221,17 @@ function AuthPage() {
     }
   };
 
-  const handleVerifySignup = async () => {
-    if (otp.length !== 6) return toast.error("Enter the 6-digit code");
+  const handleResendVerification = async () => {
+    if (!pendingEmail) return;
     setLoading(true);
-    try {
-      const { data, error } = await supabase.auth.verifyOtp({
-        email: pendingEmail,
-        token: otp,
-        type: "signup",
-      });
-      if (error || !data.user) {
-        toast.error(error?.message ?? "Invalid or expired code");
-        return;
-      }
-      const sid = crypto.randomUUID();
-      await supabase.from("employee_sessions").insert({ user_id: data.user.id, session_token: sid, is_active: true });
-      localStorage.setItem(SESSION_KEY, sid);
-      toast.success("Email verified");
-      navigate({ to: "/pending-approval" });
-    } finally {
-      setLoading(false);
-    }
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email: pendingEmail,
+      options: { emailRedirectTo: window.location.origin },
+    });
+    setLoading(false);
+    if (error) toast.error(error.message);
+    else toast.success("Verification email resent!");
   };
 
   const handleVerifyRecovery = async () => {
@@ -280,15 +267,12 @@ function AuthPage() {
     setPendingEmail("");
   };
 
-  const handleResendCode = async (type: "signup" | "recovery") => {
+  const handleResendCode = async (_type: "recovery") => {
     if (!pendingEmail) return;
     setLoading(true);
-    const { error } =
-      type === "recovery"
-        ? await supabase.auth.resetPasswordForEmail(pendingEmail, {
-            redirectTo: `${window.location.origin}/reset-password`,
-          })
-        : await supabase.auth.resend({ type: "signup", email: pendingEmail });
+    const { error } = await supabase.auth.resetPasswordForEmail(pendingEmail, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
     setLoading(false);
     if (error) toast.error(error.message);
     else toast.success("Code resent");
@@ -306,7 +290,35 @@ function AuthPage() {
             <CardDescription>Employee Portal</CardDescription>
           </CardHeader>
           <CardContent>
-            {step === "reset-request" ? (
+            {step === "check-email" ? (
+              <div className="space-y-4 text-center">
+                <div className="mx-auto h-14 w-14 rounded-full grid place-items-center bg-primary/10 text-primary">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="20" height="16" x="2" y="4" rx="2" /><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" /></svg>
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-lg font-semibold">Check your inbox</h3>
+                  <p className="text-sm text-muted-foreground">We sent a verification link to</p>
+                  <p className="font-medium text-foreground break-all">{pendingEmail}</p>
+                </div>
+                <div className="rounded-md bg-muted/50 p-3 text-left text-sm space-y-2">
+                  <p>👉 Click the <span className="font-medium">"Verify Email"</span> button in that email.</p>
+                  <p className="text-muted-foreground">You'll be brought back here automatically after verification.</p>
+                </div>
+                <div className="space-y-2">
+                  <Button className="w-full" disabled={loading} onClick={handleResendVerification}>
+                    {loading ? "Sending…" : "Resend verification email"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="w-full"
+                    onClick={() => { setStep("auth"); setPendingEmail(""); }}
+                  >
+                    Back to sign in
+                  </Button>
+                </div>
+              </div>
+            ) : step === "reset-request" ? (
               <form onSubmit={handleSendReset} className="space-y-4">
                 <p className="text-sm text-muted-foreground">
                   Enter your email and we'll send you a 6-digit code to reset your password.
@@ -322,7 +334,7 @@ function AuthPage() {
                   Back to sign in
                 </Button>
               </form>
-            ) : step === "verify-signup" || step === "verify-recovery" ? (
+            ) : step === "verify-recovery" ? (
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground text-center">
                   Enter the 6-digit code sent to
@@ -341,7 +353,7 @@ function AuthPage() {
                 <Button
                   className="w-full"
                   disabled={loading || otp.length !== 6}
-                  onClick={step === "verify-signup" ? handleVerifySignup : handleVerifyRecovery}
+                  onClick={handleVerifyRecovery}
                 >
                   Verify
                 </Button>
@@ -349,7 +361,7 @@ function AuthPage() {
                   <button
                     type="button"
                     className="text-muted-foreground hover:text-primary"
-                    onClick={() => handleResendCode(step === "verify-signup" ? "signup" : "recovery")}
+                    onClick={() => handleResendCode("recovery")}
                     disabled={loading}
                   >
                     Resend code

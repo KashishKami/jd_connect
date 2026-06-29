@@ -42,12 +42,23 @@ import {
   Info,
   ArrowLeft,
   PencilLine,
+  Smile,
 } from "lucide-react";
 import { toast } from "sonner";
 import { MentionInput, renderMessageBody } from "@/components/MentionInput";
 import { MessageReactions } from "@/components/MessageReactions";
 import { AttachmentPicker, AttachmentList, PendingAttachmentList, type ChatAttachment, uploadFiles } from "@/components/ChatAttachments";
 import { ThreadPanel } from "@/components/ThreadPanel";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 
 export const Route = createFileRoute("/_authenticated/channels")({
   head: () => ({ meta: [{ title: "Channels — JD Connect" }] }),
@@ -346,13 +357,16 @@ function ChannelThread({ channelId, onBack }: { channelId: string; onBack?: () =
     queryFn: async () => {
       const { data, error } = await supabase
         .from("messages")
-        .select("id, body, sender_id, created_at, is_pinned, attachments, parent_message_id, edited_at")
+        .select("id, body, sender_id, created_at, is_pinned, attachments, parent_message_id, edited_at, replies:messages!parent_message_id(count)")
         .eq("channel_id", channelId)
         .is("parent_message_id", null)
         .order("created_at", { ascending: true })
         .limit(200);
       if (error) throw error;
-      return (data ?? []) as Msg[];
+      return ((data ?? []) as any[]).map((m) => ({
+        ...m,
+        reply_count: (m.replies?.[0]?.count ?? 0) as number,
+      })) as Msg[];
     },
   });
 
@@ -589,7 +603,7 @@ function ChannelThread({ channelId, onBack }: { channelId: string; onBack?: () =
             const mine = m.sender_id === employee?.id;
             const isEditing = editingId === m.id;
             return (
-              <div key={m.id} className={`group flex ${mine ? "justify-end" : "justify-start"}`}>
+              <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
                 <div className="flex flex-col max-w-[75%]">
                   {!mine && (
                     <div className="text-[11px] text-muted-foreground mb-1 px-1 flex items-center gap-2">
@@ -603,97 +617,141 @@ function ChannelThread({ channelId, onBack }: { channelId: string; onBack?: () =
                       <span>{new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
                     </div>
                   )}
-                  
-                  <div className={`relative rounded-2xl py-2 px-3 text-sm shadow-sm border ${
-                    mine
-                      ? "bg-primary text-primary-foreground border-primary/20 rounded-tr-none"
-                      : "bg-card text-card-foreground border-border/50 rounded-tl-none"
-                  }`}>
-                    {/* Message body — normal or edit mode */}
-                    {isEditing ? (
-                      <div className="space-y-1.5">
-                        <textarea
-                          className="w-full min-w-[200px] bg-primary-foreground/10 text-primary-foreground border border-primary-foreground/30 rounded-lg px-2 py-1.5 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary-foreground/50"
-                          rows={3}
-                          value={editBody}
-                          onChange={(e) => setEditBody(e.target.value)}
-                          autoFocus
-                          onKeyDown={(e) => {
-                            if (e.key === "Escape") cancelEdit();
-                            if ((e.ctrlKey || e.metaKey) && e.key === "Enter") void saveEdit(m.id);
-                          }}
-                        />
-                        <div className="flex items-center gap-1.5 justify-end">
-                          <button
-                            onClick={cancelEdit}
-                            className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-primary-foreground/10 hover:bg-primary-foreground/20 text-primary-foreground/80 transition-colors"
-                          >
-                            <X className="h-3 w-3" /> Cancel
-                          </button>
-                          <button
-                            onClick={() => void saveEdit(m.id)}
-                            disabled={!editBody.trim()}
-                            className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-primary-foreground/20 hover:bg-primary-foreground/30 text-primary-foreground font-semibold disabled:opacity-40 transition-colors"
-                          >
-                            <Check className="h-3 w-3" /> Save
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="leading-relaxed break-words">{renderMessageBody(m.body, mine)}</div>
-                        {!mine && m.edited_at && (
-                          <div className="text-[10px] italic opacity-60 mt-0.5">edited</div>
-                        )}
-                      </>
-                    )}
-                    <AttachmentList attachments={(m.attachments ?? []) as ChatAttachment[]} />
-                    <MessageReactions messageId={m.id} />
 
-                    {/* Hover Actions Bar — floats above the bubble */}
-                    {!isEditing && (
-                      <div className={`absolute -top-7 flex items-center gap-1.5 bg-background border shadow-md px-2 py-1 rounded-full z-20 opacity-0 group-hover:opacity-100 transition-opacity duration-150 ${
-                        mine ? "left-0" : "right-0"
+                  <ContextMenu>
+                    <ContextMenuTrigger asChild>
+                      <div className={`relative rounded-2xl py-2 px-3 text-sm shadow-sm border select-none ${
+                        mine
+                          ? "bg-primary text-primary-foreground border-primary/20 rounded-tr-none"
+                          : "bg-card text-card-foreground border-border/50 rounded-tl-none"
                       }`}>
-                        {mine && (
+                        {/* Message body — normal or edit mode */}
+                        {isEditing ? (
+                          <div className="space-y-1.5">
+                            <textarea
+                              className="w-full min-w-[200px] bg-primary-foreground/10 text-primary-foreground border border-primary-foreground/30 rounded-lg px-2 py-1.5 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary-foreground/50"
+                              rows={3}
+                              value={editBody}
+                              onChange={(e) => setEditBody(e.target.value)}
+                              autoFocus
+                              onKeyDown={(e) => {
+                                if (e.key === "Escape") cancelEdit();
+                                if ((e.ctrlKey || e.metaKey) && e.key === "Enter") void saveEdit(m.id);
+                              }}
+                            />
+                            <div className="flex items-center gap-1.5 justify-end">
+                              <button
+                                onClick={cancelEdit}
+                                className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-primary-foreground/10 hover:bg-primary-foreground/20 text-primary-foreground/80 transition-colors"
+                              >
+                                <X className="h-3 w-3" /> Cancel
+                              </button>
+                              <button
+                                onClick={() => void saveEdit(m.id)}
+                                disabled={!editBody.trim()}
+                                className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-primary-foreground/20 hover:bg-primary-foreground/30 text-primary-foreground font-semibold disabled:opacity-40 transition-colors"
+                              >
+                                <Check className="h-3 w-3" /> Save
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
                           <>
-                            <button
-                              onClick={() => startEdit(m)}
-                              className="text-[10px] text-muted-foreground hover:text-foreground font-medium inline-flex items-center gap-0.5 cursor-pointer"
-                            >
-                              <PencilLine className="h-3 w-3" />
-                              Edit
-                            </button>
-                            <span className="text-muted-foreground/30 text-[10px]">|</span>
+                            <div className="leading-relaxed break-words">{renderMessageBody(m.body, mine)}</div>
+                            {!mine && m.edited_at && (
+                              <div className="text-[10px] italic opacity-60 mt-0.5">edited</div>
+                            )}
                           </>
                         )}
-                        {(mine || canModerate) && (
-                          <>
-                            <button
-                              onClick={() => togglePin(m)}
-                              className="text-[10px] text-muted-foreground hover:text-foreground font-medium cursor-pointer"
-                            >
-                              {m.is_pinned ? "Unpin" : "Pin"}
-                            </button>
-                            <span className="text-muted-foreground/30 text-[10px]">|</span>
-                          </>
-                        )}
-                        <button
-                          onClick={() => setThreadParentId(m.id)}
-                          className="text-[10px] text-muted-foreground hover:text-foreground font-medium inline-flex items-center gap-0.5 cursor-pointer"
-                        >
-                          <MessageSquare className="h-3 w-3" />
-                          Reply
-                        </button>
-                      </div>
-                    )}
+                        <AttachmentList attachments={(m.attachments ?? []) as ChatAttachment[]} />
+                        <MessageReactions messageId={m.id} />
 
-                    {m.is_pinned && (
-                      <div className={`absolute -bottom-1.5 ${mine ? "-left-1.5" : "-right-1.5"} bg-background border rounded-full p-0.5 shadow-sm`}>
-                        <Pin className="h-3 w-3 text-primary fill-primary" />
+                        {/* Thread reply indicator */}
+                        {(m.reply_count ?? 0) > 0 && (
+                          <button
+                            onClick={() => setThreadParentId(m.id)}
+                            className={`mt-1.5 inline-flex items-center gap-1.5 text-[11px] font-medium rounded-full px-2 py-0.5 transition-colors ${
+                              mine
+                                ? "text-primary-foreground/80 bg-primary-foreground/10 hover:bg-primary-foreground/20"
+                                : "text-primary hover:text-primary/80 bg-primary/8 hover:bg-primary/15 border border-primary/20"
+                            }`}
+                          >
+                            <MessageSquare className="h-3 w-3" />
+                            {m.reply_count} {m.reply_count === 1 ? "reply" : "replies"}
+                          </button>
+                        )}
+
+                        {m.is_pinned && (
+                          <div className={`absolute -bottom-1.5 ${mine ? "-left-1.5" : "-right-1.5"} bg-background border rounded-full p-0.5 shadow-sm`}>
+                            <Pin className="h-3 w-3 text-primary fill-primary" />
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent className="w-52">
+                      {mine && !isEditing && (
+                        <ContextMenuItem
+                          className="gap-2 cursor-pointer"
+                          onSelect={() => startEdit(m)}
+                        >
+                          <PencilLine className="h-4 w-4" />
+                          Edit message
+                        </ContextMenuItem>
+                      )}
+                      <ContextMenuItem
+                        className="gap-2 cursor-pointer"
+                        onSelect={() => setThreadParentId(m.id)}
+                      >
+                        <MessageSquare className="h-4 w-4" />
+                        Reply in thread
+                      </ContextMenuItem>
+                      {(mine || canModerate) && (
+                        <ContextMenuItem
+                          className="gap-2 cursor-pointer"
+                          onSelect={() => togglePin(m)}
+                        >
+                          <Pin className="h-4 w-4" />
+                          {m.is_pinned ? "Unpin" : "Pin message"}
+                        </ContextMenuItem>
+                      )}
+                      <ContextMenuSeparator />
+                      <ContextMenuSub>
+                        <ContextMenuSubTrigger className="gap-2 cursor-pointer">
+                          <Smile className="h-4 w-4" />
+                          React
+                        </ContextMenuSubTrigger>
+                        <ContextMenuSubContent className="p-1">
+                          <div className="flex flex-wrap gap-0.5 max-w-[160px]">
+                            {["👍","❤️","😂","🎉","🙏","👀","🔥","✅"].map((emoji) => (
+                              <ContextMenuItem
+                                key={emoji}
+                                className="text-lg p-1.5 rounded cursor-pointer hover:bg-muted justify-center"
+                                onSelect={() => {
+                                  void (async () => {
+                                    const { data: existing } = await (supabase as any)
+                                      .from("message_reactions")
+                                      .select("id")
+                                      .eq("message_id", m.id)
+                                      .eq("employee_id", employee?.id)
+                                      .eq("emoji", emoji)
+                                      .maybeSingle();
+                                    if (existing) {
+                                      await (supabase as any).from("message_reactions").delete().eq("id", existing.id);
+                                    } else {
+                                      await (supabase as any).from("message_reactions").insert({ message_id: m.id, employee_id: employee?.id, emoji });
+                                    }
+                                    void qc.invalidateQueries({ queryKey: ["reactions", m.id] });
+                                  })();
+                                }}
+                              >
+                                {emoji}
+                              </ContextMenuItem>
+                            ))}
+                          </div>
+                        </ContextMenuSubContent>
+                      </ContextMenuSub>
+                    </ContextMenuContent>
+                  </ContextMenu>
                 </div>
               </div>
             );

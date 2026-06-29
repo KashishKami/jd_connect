@@ -75,7 +75,7 @@ ALTER EXTENSION vector  SET SCHEMA extensions;
 
 -- Functions that reference the moved types/operators must keep
 -- 'extensions' on their search_path so existing SQL keeps resolving.
-ALTER FUNCTION public.match_knowledge(vector, integer, double precision)
+ALTER FUNCTION public.match_knowledge(extensions.vector, integer, double precision)
   SET search_path = public, extensions;
 
 ALTER FUNCTION public.search_employee_directory(

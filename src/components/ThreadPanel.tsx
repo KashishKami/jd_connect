@@ -55,10 +55,12 @@ export function ThreadPanel({ parentId, channelId, onClose }: { parentId: string
     const ch = supabase.channel(`thread-${parentId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `parent_message_id=eq.${parentId}` }, () => {
         qc.invalidateQueries({ queryKey: ["thread-replies", parentId] });
+        // Refresh parent message list so reply_count badge updates
+        qc.invalidateQueries({ queryKey: ["ch-messages", channelId] });
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [parentId, qc]);
+  }, [parentId, channelId, qc]);
 
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }); }, [replies.length]);
 
@@ -76,24 +78,33 @@ export function ThreadPanel({ parentId, channelId, onClose }: { parentId: string
   };
 
   return (
-    <div className="w-80 border-l bg-background flex flex-col h-full">
-      <div className="flex items-center justify-between border-b p-3">
-        <div className="text-sm font-semibold">Thread · {replies.length} {replies.length === 1 ? "reply" : "replies"}</div>
-        <Button variant="ghost" size="icon" onClick={onClose}><X className="h-4 w-4" /></Button>
-      </div>
-      <div ref={scrollRef} className="flex-1 overflow-auto p-3 space-y-3">
-        {parent && <MessageRow m={parent} />}
-        {replies.length > 0 && <div className="border-b text-[10px] text-muted-foreground uppercase tracking-wider py-1">Replies</div>}
-        {replies.map((m) => <MessageRow key={m.id} m={m} />)}
-      </div>
-      <div className="border-t p-2 space-y-2">
-        <Textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Reply…" rows={2} maxLength={4000}
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
-        <div className="flex justify-end">
-          <Button size="sm" onClick={send} disabled={!body.trim()}><Send className="h-3 w-3 mr-1" />Reply</Button>
+    <>
+      {/* Mobile backdrop — tapping it closes the panel */}
+      <div
+        className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px] md:hidden"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      {/* Panel — fixed slide-over on mobile, inline side-panel on desktop */}
+      <div className="fixed inset-y-0 right-0 z-50 flex w-[calc(100%-2.5rem)] max-w-sm flex-col border-l bg-background shadow-2xl transition-transform duration-300 ease-out md:relative md:inset-auto md:z-auto md:w-80 md:shadow-none md:translate-x-0">
+        <div className="flex items-center justify-between border-b p-3">
+          <div className="text-sm font-semibold">Thread · {replies.length} {replies.length === 1 ? "reply" : "replies"}</div>
+          <Button variant="ghost" size="icon" onClick={onClose}><X className="h-4 w-4" /></Button>
+        </div>
+        <div ref={scrollRef} className="flex-1 overflow-auto p-3 space-y-3">
+          {parent && <MessageRow m={parent} />}
+          {replies.length > 0 && <div className="border-b text-[10px] text-muted-foreground uppercase tracking-wider py-1">Replies</div>}
+          {replies.map((m) => <MessageRow key={m.id} m={m} />)}
+        </div>
+        <div className="border-t p-2 space-y-2">
+          <Textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Reply…" rows={2} maxLength={4000}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
+          <div className="flex justify-end">
+            <Button size="sm" onClick={send} disabled={!body.trim()}><Send className="h-3 w-3 mr-1" />Reply</Button>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }
 

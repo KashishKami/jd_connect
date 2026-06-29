@@ -21,10 +21,20 @@ export const Route = createFileRoute("/_authenticated/admin/employees")({ compon
 type EmpStatus = "active" | "suspended" | "resigned" | "terminated";
 type ApprovalStatus = "pending" | "approved" | "rejected";
 type EmpRow = {
-  id: string; employee_code: string; full_name: string; alias_name: string | null; email: string; mobile: string | null;
-  designation: string | null; employment_status: EmpStatus;
-  department_id: string | null; centre_id: string | null; role_id: string | null;
-  team_leader_id: string | null; manager_id: string | null; shift_id: string | null;
+  id: string;
+  employee_code: string;
+  full_name: string;
+  alias_name: string | null;
+  email: string;
+  mobile: string | null;
+  designation: string | null;
+  employment_status: EmpStatus;
+  department_id: string | null;
+  centre_id: string | null;
+  role_id: string | null;
+  team_leader_id: string | null;
+  manager_id: string | null;
+  shift_id: string | null;
   joining_date: string | null;
   approval_status?: ApprovalStatus;
 };
@@ -60,7 +70,8 @@ function Page() {
     },
   });
 
-  const EMP_COLS = "id, employee_code, full_name, alias_name, username, designation, employment_status, approval_status, profile_photo_url, joining_date, department_id, centre_id, role_id, shift_id, team_leader_id, manager_id, auth_user_id, profile_completed, created_at, updated_at, departments(name), centres(code), roles(name)";
+  const EMP_COLS =
+    "id, employee_code, full_name, alias_name, username, designation, employment_status, approval_status, profile_photo_url, joining_date, department_id, centre_id, role_id, shift_id, team_leader_id, manager_id, auth_user_id, profile_completed, created_at, updated_at, departments(name), centres(code), roles(name)";
   const { data: emps } = useQuery({
     queryKey: ["admin-employees"],
     queryFn: async () => {
@@ -88,19 +99,37 @@ function Page() {
         supabase.from("shifts").select("id, name").eq("is_active", true).order("name"),
         supabase.from("employees").select("id, full_name, employee_code, role_id, roles(key)").order("full_name"),
       ]);
-      return { depts: d.data ?? [], centres: c.data ?? [], roles: r.data ?? [], shifts: s.data ?? [], emps: e.data ?? [] };
+      return {
+        depts: d.data ?? [],
+        centres: c.data ?? [],
+        roles: r.data ?? [],
+        shifts: s.data ?? [],
+        emps: e.data ?? [],
+      };
     },
   });
 
   const save = useMutation({
     mutationFn: async (row: Partial<EmpRow>) => {
-      if (editing) { const { error } = await supabase.from("employees").update(row as never).eq("id", editing.id); if (error) throw error; }
-      else {
-        const { error } = await supabase.from("employees").insert({ ...row, full_name: row.full_name!, email: row.email! } as never);
+      if (editing) {
+        const { error } = await supabase
+          .from("employees")
+          .update(row as never)
+          .eq("id", editing.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("employees")
+          .insert({ ...row, full_name: row.full_name!, email: row.email! } as never);
         if (error) throw error;
       }
     },
-    onSuccess: () => { toast.success("Saved"); setOpen(false); setEditing(null); qc.invalidateQueries({ queryKey: ["admin-employees"] }); },
+    onSuccess: () => {
+      toast.success("Saved");
+      setOpen(false);
+      setEditing(null);
+      qc.invalidateQueries({ queryKey: ["admin-employees"] });
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -109,7 +138,10 @@ function Page() {
       const { error } = await supabase.rpc("approve_employee", { _employee_id: id });
       if (error) throw error;
     },
-    onSuccess: () => { toast.success("Approved"); qc.invalidateQueries({ queryKey: ["admin-employees"] }); },
+    onSuccess: () => {
+      toast.success("Approved");
+      qc.invalidateQueries({ queryKey: ["admin-employees"] });
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -118,7 +150,10 @@ function Page() {
       const { error } = await supabase.rpc("reject_employee", { _employee_id: id });
       if (error) throw error;
     },
-    onSuccess: () => { toast.success("Rejected"); qc.invalidateQueries({ queryKey: ["admin-employees"] }); },
+    onSuccess: () => {
+      toast.success("Rejected");
+      qc.invalidateQueries({ queryKey: ["admin-employees"] });
+    },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -127,7 +162,8 @@ function Page() {
   const filteredEmps = useMemo(() => {
     return emps?.filter((e) => {
       const sQ = q.trim().toLowerCase();
-      const nameMatch = !sQ ||
+      const nameMatch =
+        !sQ ||
         (e.full_name || "").toLowerCase().includes(sQ) ||
         (e.alias_name || "").toLowerCase().includes(sQ) ||
         (e.employee_code || "").toLowerCase().includes(sQ) ||
@@ -149,12 +185,26 @@ function Page() {
           <h1 className="text-2xl font-semibold">Employee Management</h1>
           <p className="text-sm text-muted-foreground">
             Create and edit employee records. IDs auto-generate (JD0001, JD0002…).
-            {pendingCount > 0 && <span className="ml-2 inline-flex items-center rounded-full bg-amber-500/10 text-amber-700 px-2 py-0.5 text-xs font-medium">{pendingCount} awaiting approval</span>}
+            {pendingCount > 0 && (
+              <span className="ml-2 inline-flex items-center rounded-full bg-amber-500/10 text-amber-700 px-2 py-0.5 text-xs font-medium">
+                {pendingCount} awaiting approval
+              </span>
+            )}
           </p>
         </div>
         {(canCreate || canEdit) && (
-          <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setEditing(null); }}>
-            {canCreate && <DialogTrigger asChild><Button onClick={() => setEditing(null)}>Add Employee</Button></DialogTrigger>}
+          <Dialog
+            open={open}
+            onOpenChange={(v) => {
+              setOpen(v);
+              if (!v) setEditing(null);
+            }}
+          >
+            {canCreate && (
+              <DialogTrigger asChild>
+                <Button onClick={() => setEditing(null)}>Add Employee</Button>
+              </DialogTrigger>
+            )}
             <EmpDialog refs={refs} editing={editing} onSave={(r) => save.mutate(r)} />
           </Dialog>
         )}
@@ -163,30 +213,55 @@ function Page() {
       <Card>
         <CardContent className="p-4 space-y-3">
           <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
-            <Input className="md:col-span-2" placeholder="Search name, ID, email…" value={q} onChange={(e) => setQ(e.target.value)} />
+            <Input
+              className="md:col-span-2"
+              placeholder="Search name, ID, email…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
             <Select value={dept} onValueChange={setDept}>
-              <SelectTrigger><SelectValue placeholder="Department" /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue placeholder="Department" />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All departments</SelectItem>
-                {filters?.departments.map((d) => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                {filters?.departments.map((d) => (
+                  <SelectItem key={d.id} value={d.id}>
+                    {d.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Select value={centre} onValueChange={setCentre}>
-              <SelectTrigger><SelectValue placeholder="Centre" /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue placeholder="Centre" />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All centres</SelectItem>
-                {filters?.centres.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                {filters?.centres.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Select value={role} onValueChange={setRole}>
-              <SelectTrigger><SelectValue placeholder="Role" /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue placeholder="Role" />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All roles</SelectItem>
-                {filters?.roles.map((r) => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
+                {filters?.roles.map((r) => (
+                  <SelectItem key={r.id} value={r.id}>
+                    {r.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectTrigger>
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All statuses</SelectItem>
                 <SelectItem value="active">Active</SelectItem>
@@ -199,117 +274,281 @@ function Page() {
         </CardContent>
       </Card>
 
-      <Card><CardContent className="p-0"><Table>
-        <TableHeader><TableRow>
-          <TableHead>ID</TableHead><TableHead>Name</TableHead><TableHead>Email</TableHead>
-          <TableHead>Department</TableHead><TableHead>Centre</TableHead><TableHead>Role</TableHead>
-          <TableHead>Status</TableHead><TableHead>Approval</TableHead><TableHead></TableHead>
-        </TableRow></TableHeader>
-        <TableBody>
-          {filteredEmps?.map((e) => (
-            <TableRow key={e.id}>
-              <TableCell className="font-mono text-xs">{e.employee_code}</TableCell>
-              <TableCell>
-                <Link to="/employees/$id" params={{ id: e.id }} className="hover:underline font-medium">
-                  {e.alias_name || e.full_name}
-                </Link>
-                {e.alias_name && <div className="text-[10px] text-muted-foreground">{e.full_name}</div>}
-              </TableCell>
-              <TableCell className="text-xs">{e.email}</TableCell>
-              <TableCell>{(e.departments as { name: string } | null)?.name ?? "—"}</TableCell>
-              <TableCell>{(e.centres as { code: string } | null)?.code ?? "—"}</TableCell>
-              <TableCell>{(e.roles as { name: string } | null)?.name ?? "—"}</TableCell>
-              <TableCell className="capitalize">{e.employment_status}</TableCell>
-              <TableCell>
-                {(() => {
-                  const a = (e as EmpRow).approval_status ?? "approved";
-                  const cls = a === "approved" ? "bg-emerald-500/10 text-emerald-700"
-                    : a === "pending" ? "bg-amber-500/10 text-amber-700"
-                    : "bg-destructive/10 text-destructive";
-                  return <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ${cls}`}>{a}</span>;
-                })()}
-              </TableCell>
-              <TableCell className="flex gap-1">
-                {canApprove && (e as EmpRow).approval_status !== "approved" && (
-                  <Button size="sm" variant="default" onClick={() => approve.mutate(e.id)} disabled={approve.isPending}>Approve</Button>
-                )}
-                {canApprove && (e as EmpRow).approval_status === "pending" && (
-                  <Button size="sm" variant="outline" onClick={() => reject.mutate(e.id)} disabled={reject.isPending}>Reject</Button>
-                )}
-                {canEdit && <Button size="sm" variant="outline" onClick={() => { setEditing(e as EmpRow); setOpen(true); }}>Edit</Button>}
-                {canResetPassword && (
-                  <Button size="sm" variant="outline" onClick={() => setPwTarget(e as EmpRow)}>Password</Button>
-                )}
-                {canDelete && <DeleteRowButton entity="employee" id={e.id} label={e.full_name} invalidateKeys={[["admin-employees"]]} alreadyTerminated={e.employment_status === "terminated"} />}
-              </TableCell>
-            </TableRow>
-          ))}
-          {filteredEmps && filteredEmps.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
-                No employees found
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table></CardContent></Card>
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>ID</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Department</TableHead>
+                <TableHead>Centre</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Approval</TableHead>
+                <TableHead></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredEmps?.map((e) => (
+                <TableRow key={e.id}>
+                  <TableCell className="font-mono text-xs">{e.employee_code}</TableCell>
+                  <TableCell>
+                    <Link to="/employees/$id" params={{ id: e.id }} className="hover:underline font-medium">
+                      {e.alias_name || e.full_name}
+                    </Link>
+                    {e.alias_name && <div className="text-[10px] text-muted-foreground">{e.full_name}</div>}
+                  </TableCell>
+                  <TableCell className="text-xs">{e.email}</TableCell>
+                  <TableCell>{(e.departments as { name: string } | null)?.name ?? "—"}</TableCell>
+                  <TableCell>{(e.centres as { code: string } | null)?.code ?? "—"}</TableCell>
+                  <TableCell>{(e.roles as { name: string } | null)?.name ?? "—"}</TableCell>
+                  <TableCell className="capitalize">{e.employment_status}</TableCell>
+                  <TableCell>
+                    {(() => {
+                      const a = (e as EmpRow).approval_status ?? "approved";
+                      const cls =
+                        a === "approved"
+                          ? "bg-emerald-500/10 text-emerald-700"
+                          : a === "pending"
+                            ? "bg-amber-500/10 text-amber-700"
+                            : "bg-destructive/10 text-destructive";
+                      return (
+                        <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ${cls}`}>
+                          {a}
+                        </span>
+                      );
+                    })()}
+                  </TableCell>
+                  <TableCell className="flex gap-1">
+                    {canApprove && (e as EmpRow).approval_status !== "approved" && (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={() => approve.mutate(e.id)}
+                        disabled={approve.isPending}
+                      >
+                        Approve
+                      </Button>
+                    )}
+                    {canApprove && (e as EmpRow).approval_status === "pending" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => reject.mutate(e.id)}
+                        disabled={reject.isPending}
+                      >
+                        Reject
+                      </Button>
+                    )}
+                    {canEdit && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setEditing(e as EmpRow);
+                          setOpen(true);
+                        }}
+                      >
+                        Edit
+                      </Button>
+                    )}
+                    {canResetPassword && (
+                      <Button size="sm" variant="outline" onClick={() => setPwTarget(e as EmpRow)}>
+                        Password
+                      </Button>
+                    )}
+                    {canDelete && (
+                      <DeleteRowButton
+                        entity="employee"
+                        id={e.id}
+                        label={e.full_name}
+                        invalidateKeys={[["admin-employees"]]}
+                        alreadyTerminated={e.employment_status === "terminated"}
+                      />
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+              {filteredEmps && filteredEmps.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                    No employees found
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
       <PasswordDialog target={pwTarget} onClose={() => setPwTarget(null)} />
     </div>
   );
 }
 
-function EmpDialog({ refs, editing, onSave }: {
- refs: { depts: { id: string; name: string }[]; centres: { id: string; name: string }[]; roles: { id: string; name: string }[]; shifts: { id: string; name: string }[]; emps: { id: string; full_name: string; employee_code: string; role_id: string | null; roles: { key: string | null } | null }[] } | undefined;
+function EmpDialog({
+  refs,
+  editing,
+  onSave,
+}: {
+  refs:
+  | {
+    depts: { id: string; name: string }[];
+    centres: { id: string; name: string }[];
+    roles: { id: string; name: string }[];
+    shifts: { id: string; name: string }[];
+    emps: {
+      id: string;
+      full_name: string;
+      employee_code: string;
+      role_id: string | null;
+      roles: { key: string | null } | null;
+    }[];
+  }
+  | undefined;
   editing: EmpRow | null;
   onSave: (row: Partial<EmpRow>) => void;
 }) {
   const [form, setForm] = useState<Partial<EmpRow>>(editing ?? { employment_status: "active" });
   const set = <K extends keyof EmpRow>(k: K, v: EmpRow[K] | null) => setForm((f) => ({ ...f, [k]: v }));
-  const tls = refs?.emps.filter((x) => (x.roles?.key === "team_leader")) ?? [];
-  const mgrs = refs?.emps.filter((x) => (x.roles?.key === "manager")) ?? [];
+  const tls = refs?.emps.filter((x) => x.roles?.key === "team_leader") ?? [];
+  const mgrs = refs?.emps.filter((x) => x.roles?.key === "manager") ?? [];
   return (
     <DialogContent className="max-w-2xl">
-      <DialogHeader><DialogTitle>{editing ? "Edit employee" : "New employee"}</DialogTitle></DialogHeader>
+      <DialogHeader>
+        <DialogTitle>{editing ? "Edit employee" : "New employee"}</DialogTitle>
+      </DialogHeader>
       <div className="grid grid-cols-2 gap-3">
-        <div><Label>Employee ID *</Label><Input value={form.employee_code ?? ""} onChange={(e) => set("employee_code", e.target.value)} placeholder="e.g. JD-0042" /></div>
-        <div><Label>Full name *</Label><Input value={form.full_name ?? ""} onChange={(e) => set("full_name", e.target.value)} /></div>
-        <div className="col-span-2"><Label>Alias name <span className="text-xs text-muted-foreground">(shown across the platform)</span></Label><Input value={form.alias_name ?? ""} onChange={(e) => set("alias_name", e.target.value)} placeholder="e.g. Alex Thomas" /></div>
-        <div><Label>Email *</Label><Input type="email" value={form.email ?? ""} onChange={(e) => set("email", e.target.value)} disabled={!!editing} /></div>
-        <div><Label>Mobile</Label><Input value={form.mobile ?? ""} onChange={(e) => set("mobile", e.target.value)} /></div>
-        <div><Label>Designation</Label><Input value={form.designation ?? ""} onChange={(e) => set("designation", e.target.value)} /></div>
-        <div><Label>Joining date</Label><Input type="date" value={form.joining_date ?? ""} onChange={(e) => set("joining_date", e.target.value)} /></div>
-        <RefSelect label="Department" value={form.department_id} onChange={(v) => set("department_id", v)} options={refs?.depts ?? []} />
-        <RefSelect label="Centre" value={form.centre_id} onChange={(v) => set("centre_id", v)} options={refs?.centres ?? []} />
+        <div>
+          <Label>Employee ID *</Label>
+          <Input
+            value={form.employee_code ?? ""}
+            onChange={(e) => set("employee_code", e.target.value)}
+            placeholder="e.g. JD-0042"
+          />
+        </div>
+        <div>
+          <Label>Full name *</Label>
+          <Input value={form.full_name ?? ""} onChange={(e) => set("full_name", e.target.value)} />
+        </div>
+        <div className="col-span-2">
+          <Label>
+            Alias name <span className="text-xs text-muted-foreground">(shown across the platform)</span>
+          </Label>
+          <Input
+            value={form.alias_name ?? ""}
+            onChange={(e) => set("alias_name", e.target.value)}
+            placeholder="e.g. Alex Thomas"
+          />
+        </div>
+        <div>
+          <Label>Email *</Label>
+          <Input
+            type="email"
+            value={form.email ?? ""}
+            onChange={(e) => set("email", e.target.value)}
+            disabled={!!editing}
+          />
+        </div>
+        <div>
+          <Label>Mobile</Label>
+          <Input value={form.mobile ?? ""} onChange={(e) => set("mobile", e.target.value)} />
+        </div>
+        <div>
+          <Label>Designation</Label>
+          <Input value={form.designation ?? ""} onChange={(e) => set("designation", e.target.value)} />
+        </div>
+        <div>
+          <Label>Joining date</Label>
+          <Input type="date" value={form.joining_date ?? ""} onChange={(e) => set("joining_date", e.target.value)} />
+        </div>
+        <RefSelect
+          label="Department"
+          value={form.department_id}
+          onChange={(v) => set("department_id", v)}
+          options={refs?.depts ?? []}
+        />
+        <RefSelect
+          label="Centre"
+          value={form.centre_id}
+          onChange={(v) => set("centre_id", v)}
+          options={refs?.centres ?? []}
+        />
         <RefSelect label="Role" value={form.role_id} onChange={(v) => set("role_id", v)} options={refs?.roles ?? []} />
-        <RefSelect label="Shift" value={form.shift_id} onChange={(v) => set("shift_id", v)} options={refs?.shifts ?? []} />
-        <RefSelect label="Team Leader" value={form.team_leader_id} onChange={(v) => set("team_leader_id", v)} options={tls.map((x) => ({ id: x.id, name: `${x.full_name} (${x.employee_code})` }))} />
-        <RefSelect label="Manager" value={form.manager_id} onChange={(v) => set("manager_id", v)} options={mgrs.map((x) => ({ id: x.id, name: `${x.full_name} (${x.employee_code})` }))} />
+        <RefSelect
+          label="Shift"
+          value={form.shift_id}
+          onChange={(v) => set("shift_id", v)}
+          options={refs?.shifts ?? []}
+        />
+        <RefSelect
+          label="Team Leader"
+          value={form.team_leader_id}
+          onChange={(v) => set("team_leader_id", v)}
+          options={tls.map((x) => ({ id: x.id, name: `${x.full_name} (${x.employee_code})` }))}
+        />
+        <RefSelect
+          label="Manager"
+          value={form.manager_id}
+          onChange={(v) => set("manager_id", v)}
+          options={mgrs.map((x) => ({ id: x.id, name: `${x.full_name} (${x.employee_code})` }))}
+        />
         <div>
           <Label>Status</Label>
-          <Select value={form.employment_status ?? "active"} onValueChange={(v) => set("employment_status", v as EmpStatus)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+          <Select
+            value={form.employment_status ?? "active"}
+            onValueChange={(v) => set("employment_status", v as EmpStatus)}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
-              <SelectItem value="active">Active</SelectItem><SelectItem value="suspended">Suspended</SelectItem>
-              <SelectItem value="resigned">Resigned</SelectItem><SelectItem value="terminated">Terminated</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="suspended">Suspended</SelectItem>
+              <SelectItem value="resigned">Resigned</SelectItem>
+              <SelectItem value="terminated">Terminated</SelectItem>
             </SelectContent>
           </Select>
         </div>
       </div>
-      {!editing && <p className="text-xs text-muted-foreground">After creation, the user signs up with this email — their account will link automatically.</p>}
-      <DialogFooter><Button onClick={() => onSave(form)}>Save</Button></DialogFooter>
+      {!editing && (
+        <p className="text-xs text-muted-foreground">
+          After creation, the user signs up with this email — their account will link automatically.
+        </p>
+      )}
+      <DialogFooter>
+        <Button onClick={() => onSave(form)}>Save</Button>
+      </DialogFooter>
     </DialogContent>
   );
 }
 
-function RefSelect({ label, value, onChange, options }: { label: string; value: string | null | undefined; onChange: (v: string | null) => void; options: { id: string; name: string }[] }) {
+function RefSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string | null | undefined;
+  onChange: (v: string | null) => void;
+  options: { id: string; name: string }[];
+}) {
   return (
     <div>
       <Label>{label}</Label>
       <Select value={value ?? "none"} onValueChange={(v) => onChange(v === "none" ? null : v)}>
-        <SelectTrigger><SelectValue placeholder="—" /></SelectTrigger>
+        <SelectTrigger>
+          <SelectValue placeholder="—" />
+        </SelectTrigger>
         <SelectContent>
           <SelectItem value="none">—</SelectItem>
-          {options.map((o) => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}
+          {options.map((o) => (
+            <SelectItem key={o.id} value={o.id}>
+              {o.name}
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
     </div>
@@ -329,19 +568,32 @@ function PasswordDialog({ target, onClose }: { target: EmpRow | null; onClose: (
     },
     onSuccess: () => {
       toast.success("Password updated");
-      setPw(""); setPw2(""); onClose();
+      setPw("");
+      setPw2("");
+      onClose();
     },
     onError: (e: Error) => toast.error(e.message),
   });
   return (
-    <Dialog open={!!target} onOpenChange={(v) => { if (!v) { setPw(""); setPw2(""); onClose(); } }}>
+    <Dialog
+      open={!!target}
+      onOpenChange={(v) => {
+        if (!v) {
+          setPw("");
+          setPw2("");
+          onClose();
+        }
+      }}
+    >
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Reset password</DialogTitle>
         </DialogHeader>
         {target && (
           <p className="text-sm text-muted-foreground">
-            Set a new password for <span className="font-medium text-foreground">{target.alias_name || target.full_name}</span> ({target.employee_code}).
+            Set a new password for{" "}
+            <span className="font-medium text-foreground">{target.alias_name || target.full_name}</span> (
+            {target.employee_code}).
           </p>
         )}
         <div className="space-y-3">
@@ -355,8 +607,12 @@ function PasswordDialog({ target, onClose }: { target: EmpRow | null; onClose: (
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => m.mutate()} disabled={m.isPending}>{m.isPending ? "Updating…" : "Update password"}</Button>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={() => m.mutate()} disabled={m.isPending}>
+            {m.isPending ? "Updating…" : "Update password"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

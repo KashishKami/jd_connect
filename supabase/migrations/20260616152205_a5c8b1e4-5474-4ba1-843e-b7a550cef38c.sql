@@ -6,7 +6,7 @@ ALTER TABLE public.messages
 
 CREATE INDEX IF NOT EXISTS idx_messages_parent ON public.messages(parent_message_id) WHERE parent_message_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_messages_pinned ON public.messages(channel_id) WHERE is_pinned = true;
-CREATE INDEX IF NOT EXISTS idx_messages_body_trgm ON public.messages USING gin (body gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_messages_body_trgm ON public.messages USING gin (body extensions.gin_trgm_ops);
 
 CREATE TABLE IF NOT EXISTS public.message_reactions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

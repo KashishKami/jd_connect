@@ -47,12 +47,14 @@ function TeamBreaks() {
   // canManagePolicies: approve/reject break requests and manage break policy config
   const canManagePolicies = isAdmin || hasRole("manager") || can("breaks.policies_manage");
 
+  const canViewAll = isAdmin || can("breaks.view_all");
+
   // Discover team employee ids visible to me (via RLS-allowed query)
   const { data: teamIds = [] } = useQuery({
     enabled: !!employee?.id,
-    queryKey: ["my-team-ids", employee?.id],
+    queryKey: ["my-team-ids", employee?.id, canViewAll],
     queryFn: async () => {
-      if (isAdmin) {
+      if (canViewAll) {
         const { data } = await supabase.from("employees").select("id");
         return (data ?? []).map((e: any) => e.id as string);
       }

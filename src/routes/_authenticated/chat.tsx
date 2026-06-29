@@ -8,7 +8,16 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Send, Search, MessageSquarePlus, Circle, Check, CheckCheck, User, Info, ArrowLeft, Pencil, X as XIcon } from "lucide-react";
+import { Send, Search, MessageSquarePlus, Circle, Check, CheckCheck, User, Info, ArrowLeft, Pencil, X as XIcon, Smile } from "lucide-react";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { MentionInput, renderMessageBody } from "@/components/MentionInput";
@@ -496,76 +505,112 @@ function ChatThread({ conversationId, onBack }: { conversationId: string; onBack
           const isEditing = editingId === m.id;
           return (
             <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-              <div className={`group relative max-w-[75%] rounded-2xl py-2 text-sm shadow-sm border ${
-                mine
-                  ? "bg-primary text-primary-foreground border-primary/20 rounded-tr-none pl-4 pr-2.5"
-                  : "bg-card text-card-foreground border-border/50 rounded-tl-none pl-3 pr-4"
-              }`}>
-                {/* Hover action bar — only for own messages */}
-                {mine && !isEditing && (
-                  <div className="absolute top-0 -translate-y-1/2 left-2 flex items-center gap-1 bg-background border shadow-sm px-1.5 py-0.5 rounded-full z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                    <button
-                      onClick={() => startEdit(m)}
-                      className="text-[10px] text-muted-foreground hover:text-foreground font-medium inline-flex items-center gap-0.5 cursor-pointer"
-                    >
-                      <Pencil className="h-3 w-3" />
-                      Edit
-                    </button>
-                  </div>
-                )}
+              <ContextMenu>
+                <ContextMenuTrigger asChild>
+                  <div className={`relative max-w-[75%] rounded-2xl py-2 text-sm shadow-sm border select-none ${
+                    mine
+                      ? "bg-primary text-primary-foreground border-primary/20 rounded-tr-none pl-4 pr-2.5"
+                      : "bg-card text-card-foreground border-border/50 rounded-tl-none pl-3 pr-4"
+                  }`}>
+                    {/* Message body — normal or edit mode */}
+                    {isEditing ? (
+                      <div className="space-y-1.5">
+                        <textarea
+                          className="w-full min-w-[200px] bg-primary-foreground/10 text-primary-foreground border border-primary-foreground/30 rounded-lg px-2 py-1.5 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary-foreground/50"
+                          rows={3}
+                          value={editBody}
+                          onChange={(e) => setEditBody(e.target.value)}
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") cancelEdit();
+                            if ((e.ctrlKey || e.metaKey) && e.key === "Enter") void saveEdit(m.id);
+                          }}
+                        />
+                        <div className="flex items-center gap-1.5 justify-end">
+                          <button
+                            onClick={cancelEdit}
+                            className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-primary-foreground/10 hover:bg-primary-foreground/20 text-primary-foreground/80 transition-colors"
+                          >
+                            <XIcon className="h-3 w-3" /> Cancel
+                          </button>
+                          <button
+                            onClick={() => void saveEdit(m.id)}
+                            disabled={!editBody.trim()}
+                            className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-primary-foreground/20 hover:bg-primary-foreground/30 text-primary-foreground font-semibold disabled:opacity-40 transition-colors"
+                          >
+                            <Check className="h-3 w-3" /> Save
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="leading-relaxed">{renderMessageBody(m.body, mine)}</div>
+                    )}
 
-                {/* Message body — normal or edit mode */}
-                {isEditing ? (
-                  <div className="space-y-1.5">
-                    <textarea
-                      className="w-full min-w-[200px] bg-primary-foreground/10 text-primary-foreground border border-primary-foreground/30 rounded-lg px-2 py-1.5 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary-foreground/50"
-                      rows={3}
-                      value={editBody}
-                      onChange={(e) => setEditBody(e.target.value)}
-                      autoFocus
-                      onKeyDown={(e) => {
-                        if (e.key === "Escape") cancelEdit();
-                        if ((e.ctrlKey || e.metaKey) && e.key === "Enter") void saveEdit(m.id);
-                      }}
-                    />
-                    <div className="flex items-center gap-1.5 justify-end">
-                      <button
-                        onClick={cancelEdit}
-                        className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-primary-foreground/10 hover:bg-primary-foreground/20 text-primary-foreground/80 transition-colors"
-                      >
-                        <XIcon className="h-3 w-3" /> Cancel
-                      </button>
-                      <button
-                        onClick={() => void saveEdit(m.id)}
-                        disabled={!editBody.trim()}
-                        className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-primary-foreground/20 hover:bg-primary-foreground/30 text-primary-foreground font-semibold disabled:opacity-40 transition-colors"
-                      >
-                        <Check className="h-3 w-3" /> Save
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="leading-relaxed">{renderMessageBody(m.body, mine)}</div>
-                )}
-
-                <AttachmentList attachments={(m.attachments ?? []) as ChatAttachment[]} />
-                <div className="text-[10px] mt-1.5 flex items-center justify-end select-none gap-1 opacity-70">
-                  {m.edited_at && (
-                    <span className="italic opacity-80">edited ·</span>
-                  )}
-                  {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  {mine && (
-                    <span className="shrink-0">
-                      {m.status === "read" ? (
-                        <CheckCheck className="h-3.5 w-3.5 text-sky-300" />
-                      ) : (
-                        <Check className="h-3.5 w-3.5 text-primary-foreground/60" />
+                    <AttachmentList attachments={(m.attachments ?? []) as ChatAttachment[]} />
+                    <div className="text-[10px] mt-1.5 flex items-center justify-end select-none gap-1 opacity-70">
+                      {m.edited_at && (
+                        <span className="italic opacity-80">edited ·</span>
                       )}
-                    </span>
+                      {new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      {mine && (
+                        <span className="shrink-0">
+                          {m.status === "read" ? (
+                            <CheckCheck className="h-3.5 w-3.5 text-sky-300" />
+                          ) : (
+                            <Check className="h-3.5 w-3.5 text-primary-foreground/60" />
+                          )}
+                        </span>
+                      )}
+                    </div>
+                    <MessageReactions messageId={m.id} />
+                  </div>
+                </ContextMenuTrigger>
+                <ContextMenuContent className="w-48">
+                  {mine && !isEditing && (
+                    <ContextMenuItem
+                      className="gap-2 cursor-pointer"
+                      onSelect={() => startEdit(m)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                      Edit message
+                    </ContextMenuItem>
                   )}
-                </div>
-                <MessageReactions messageId={m.id} />
-              </div>
+                  <ContextMenuSub>
+                    <ContextMenuSubTrigger className="gap-2 cursor-pointer">
+                      <Smile className="h-4 w-4" />
+                      React
+                    </ContextMenuSubTrigger>
+                    <ContextMenuSubContent className="p-1">
+                      <div className="flex flex-wrap gap-0.5 max-w-[160px]">
+                        {["👍","❤️","😂","🎉","🙏","👀","🔥","✅"].map((emoji) => (
+                          <ContextMenuItem
+                            key={emoji}
+                            className="text-lg p-1.5 rounded cursor-pointer hover:bg-muted justify-center"
+                            onSelect={() => {
+                              void (async () => {
+                                const { data: existing } = await (supabase as any)
+                                  .from("message_reactions")
+                                  .select("id")
+                                  .eq("message_id", m.id)
+                                  .eq("employee_id", employee?.id)
+                                  .eq("emoji", emoji)
+                                  .maybeSingle();
+                                if (existing) {
+                                  await (supabase as any).from("message_reactions").delete().eq("id", existing.id);
+                                } else {
+                                  await (supabase as any).from("message_reactions").insert({ message_id: m.id, employee_id: employee?.id, emoji });
+                                }
+                              })();
+                            }}
+                          >
+                            {emoji}
+                          </ContextMenuItem>
+                        ))}
+                      </div>
+                    </ContextMenuSubContent>
+                  </ContextMenuSub>
+                </ContextMenuContent>
+              </ContextMenu>
             </div>
           );
         })}
