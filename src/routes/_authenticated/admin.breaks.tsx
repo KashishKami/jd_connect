@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,8 +29,9 @@ type BreakType = {
 
 function AdminBreaks() {
   const { isAdmin, hasRole } = useAuth();
+  const { can } = usePermissions();
   const qc = useQueryClient();
-  const canManage = isAdmin || hasRole("manager");
+  const canManage = isAdmin || hasRole("manager") || can("breaks.policies_manage");
 
   const { data: types = [] } = useQuery({
     queryKey: ["admin-break-types"],

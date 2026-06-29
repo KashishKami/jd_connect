@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,8 +25,10 @@ export const Route = createFileRoute("/_authenticated/admin/knowledge")({
 
 function KnowledgeAdmin() {
   const { isAdmin, loading } = useAuth();
+  const { can } = usePermissions();
+  const canManage = isAdmin || can("admin.knowledge");
   if (loading) return null;
-  if (!isAdmin) return <Navigate to="/dashboard" />;
+  if (!canManage) return <Navigate to="/dashboard" />;
   return (
     <div className="max-w-6xl mx-auto space-y-4">
       <h1 className="text-2xl font-semibold flex items-center gap-2">

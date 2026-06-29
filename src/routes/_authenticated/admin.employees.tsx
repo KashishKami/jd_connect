@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useRouteGuard, AccessDenied } from "@/components/PermissionGate";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
 import { useServerFn } from "@tanstack/react-start";
@@ -40,6 +41,7 @@ type EmpRow = {
 };
 
 function Page() {
+  const __guard = useRouteGuard("employees.view");
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<EmpRow | null>(null);
@@ -177,6 +179,10 @@ function Page() {
       return nameMatch && deptMatch && centreMatch && roleMatch && statusMatch;
     });
   }, [emps, q, dept, centre, role, status]);
+
+  if (!__guard.isLoading && !__guard.allowed) {
+    return <AccessDenied perm="employees.view" label="employee management" />;
+  }
 
   return (
     <div className="max-w-7xl mx-auto space-y-4">

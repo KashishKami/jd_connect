@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useRouteGuard, AccessDenied } from "@/components/PermissionGate";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,6 +17,7 @@ import { formatDateTime } from "@/lib/utils";
 export const Route = createFileRoute("/_authenticated/admin/ip-restrictions")({ component: Page });
 
 function Page() {
+  const __guard = useRouteGuard("admin.roles");
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [ipAddress, setIpAddress] = useState("");
@@ -66,6 +68,10 @@ function Page() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  if (!__guard.isLoading && !__guard.allowed) {
+    return <AccessDenied perm="admin.roles" label="IP restrictions" />;
+  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-4">

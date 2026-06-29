@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,10 +22,12 @@ export const Route = createFileRoute("/_authenticated/admin/sales-sources")({
 
 function AdminSources() {
   const { isAdmin, loading } = useAuth();
+  const { can } = usePermissions();
   const qc = useQueryClient();
+  const canManage = isAdmin || can("admin.sales_sources");
   const { data: items = [] } = useQuery({
     queryKey: ["sales-sources-all"],
-    enabled: isAdmin,
+    enabled: canManage,
     queryFn: async () => {
       const { data, error } = await supabase.from("sales_sources").select("*").order("name");
       if (error) throw error;
@@ -64,7 +67,7 @@ function AdminSources() {
   });
 
   if (loading) return null;
-  if (!isAdmin) return <Navigate to="/dashboard" />;
+  if (!canManage) return <Navigate to="/dashboard" />;
 
   return (
     <div className="max-w-3xl mx-auto space-y-4">

@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useRouteGuard, AccessDenied } from "@/components/PermissionGate";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,16 +20,15 @@ export const Route = createFileRoute("/_authenticated/admin/holidays")({
 });
 
 function HolidaysAdmin() {
+  const __guard = useRouteGuard("admin.holidays");
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ holiday_date: "", name: "", centre_id: "all", is_recurring: false, notes: "" });
-
   const { data: centres } = useQuery({ queryKey: ["centres-list"], queryFn: async () => (await supabase.from("centres").select("id, name, code").order("name")).data ?? [] });
   const { data: holidays } = useQuery({
     queryKey: ["holidays-all"],
     queryFn: async () => (await supabase.from("holidays").select("*, centres(code, name)").order("holiday_date", { ascending: false })).data ?? [],
   });
-
   const create = useMutation({
     mutationFn: async () => {
       if (!form.holiday_date || !form.name.trim()) throw new Error("Date and name are required");
@@ -44,6 +44,10 @@ function HolidaysAdmin() {
     onSuccess: () => { toast.success("Holiday added"); setOpen(false); setForm({ holiday_date: "", name: "", centre_id: "all", is_recurring: false, notes: "" }); qc.invalidateQueries({ queryKey: ["holidays-all"] }); },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  if (!__guard.isLoading && !__guard.allowed) {
+    return <AccessDenied perm="admin.holidays" label="holidays" />;
+  }
 
   return (
     <div className="max-w-5xl mx-auto space-y-4">

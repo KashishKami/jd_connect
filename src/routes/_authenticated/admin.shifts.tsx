@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useRouteGuard, AccessDenied } from "@/components/PermissionGate";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,6 +15,7 @@ import { DeleteRowButton } from "@/components/DeleteRowButton";
 
 export const Route = createFileRoute("/_authenticated/admin/shifts")({ component: Page });
 function Page() {
+  const __guard = useRouteGuard("admin.shifts");
   const qc = useQueryClient(); const [open, setOpen] = useState(false);
   const [name, setName] = useState(""); const [start, setStart] = useState("19:30"); const [end, setEnd] = useState("04:30"); const [grace, setGrace] = useState(15);
   const { data } = useQuery({ queryKey: ["shifts"], queryFn: async () => (await supabase.from("shifts").select("*").order("name")).data ?? [] });
@@ -26,6 +28,10 @@ function Page() {
     mutationFn: async ({ id, v }: { id: string; v: boolean }) => { await supabase.from("shifts").update({ is_active: v }).eq("id", id); },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["shifts"] }),
   });
+
+  if (!__guard.isLoading && !__guard.allowed) {
+    return <AccessDenied perm="admin.shifts" label="shifts" />;
+  }
   return (
     <div className="max-w-4xl mx-auto space-y-4">
       <div className="flex justify-between items-center">

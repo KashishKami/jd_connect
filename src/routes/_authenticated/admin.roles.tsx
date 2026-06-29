@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useRouteGuard, AccessDenied } from "@/components/PermissionGate";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -26,6 +27,7 @@ const MODULE_LABELS: Record<string, string> = {
 };
 
 function Page() {
+  const __guard = useRouteGuard("admin.roles");
   const qc = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -124,6 +126,10 @@ function Page() {
     onSuccess: () => { toast.success("Role deleted"); setSelectedId(null); qc.invalidateQueries({ queryKey: ["roles-perms"] }); },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  if (!__guard.isLoading && !__guard.allowed) {
+    return <AccessDenied perm="admin.roles" label="roles & permissions" />;
+  }
 
   return (
     <div className="max-w-7xl mx-auto space-y-4">
