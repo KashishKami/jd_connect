@@ -1,15 +1,25 @@
-import { formatDate, formatDateTime } from "@/lib/utils";
+import { formatDateTime } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { X, Send } from "lucide-react";
+import { X, Send, Pencil, Trash2, Smile, MessageSquare, Check } from "lucide-react";
 import { MessageReactions } from "@/components/MessageReactions";
 import { AttachmentList, type ChatAttachment } from "@/components/ChatAttachments";
 import { renderMessageBody } from "@/components/MentionInput";
 import { toast } from "sonner";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 
 type ReplyMsg = {
   id: string;
@@ -17,21 +27,25 @@ type ReplyMsg = {
   sender_id: string;
   created_at: string;
   attachments: ChatAttachment[] | null;
-  employees: { full_name: string } | null;
+  employees: { full_name: string; username: string | null } | null;
+  edited_at?: string | null;
 };
 
 export function ThreadPanel({ parentId, channelId, onClose }: { parentId: string; channelId: string; onClose: () => void }) {
   const { employee } = useAuth();
   const qc = useQueryClient();
   const [body, setBody] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editBody, setEditBody] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: parent } = useQuery({
     queryKey: ["thread-parent", parentId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("messages")
-        .select("id, body, sender_id, created_at, attachments, employees!messages_sender_id_fkey(full_name)")
+        .select("id, body, sender_id, created_at, attachments, edited_at, employees!messages_sender_id_fkey(full_name, username)")
         .eq("id", parentId).maybeSingle();
       if (error) throw error;
       return data as unknown as ReplyMsg | null;
@@ -43,7 +57,7 @@ export function ThreadPanel({ parentId, channelId, onClose }: { parentId: string
     queryFn: async () => {
       const { data, error } = await supabase
         .from("messages")
-        .select("id, body, sender_id, created_at, attachments, employees!messages_sender_id_fkey(full_name)")
+        .select("id, body, sender_id, created_at, attachments, edited_at, employees!messages_sender_id_fkey(full_name, username)")
         .eq("parent_message_id", parentId)
         .order("created_at", { ascending: true });
       if (error) throw error;
@@ -55,7 +69,10 @@ export function ThreadPanel({ parentId, channelId, onClose }: { parentId: string
     const ch = supabase.channel(`thread-${parentId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `parent_message_id=eq.${parentId}` }, () => {
         qc.invalidateQueries({ queryKey: ["thread-replies", parentId] });
-        // Refresh parent message list so reply_count badge updates
+        qc.invalidateQueries({ queryKey: ["ch-messages", channelId] });
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages", filter: `id=eq.${parentId}` }, () => {
+        qc.invalidateQueries({ queryKey: ["thread-parent", parentId] });
         qc.invalidateQueries({ queryKey: ["ch-messages", channelId] });
       })
       .subscribe();
@@ -77,6 +94,54 @@ export function ThreadPanel({ parentId, channelId, onClose }: { parentId: string
     if (error) { toast.error(error.message); setBody(text); }
   };
 
+  const startEdit = (m: ReplyMsg) => {
+    setEditingId(m.id);
+    setEditBody(m.body);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditBody("");
+  };
+
+  const saveEdit = async (id: string) => {
+    const text = editBody.trim();
+    if (!text) return;
+    const { error } = await supabase
+      .from("messages")
+      .update({ body: text, edited_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) { toast.error(error.message); return; }
+    setEditingId(null);
+    setEditBody("");
+    qc.invalidateQueries({ queryKey: ["thread-parent", parentId] });
+    qc.invalidateQueries({ queryKey: ["thread-replies", parentId] });
+    qc.invalidateQueries({ queryKey: ["ch-messages", channelId] });
+  };
+
+  const deleteMessage = async (id: string) => {
+    const { error } = await supabase
+      .from("messages")
+      .update({ body: "This message has been deleted.", attachments: [] })
+      .eq("id", id);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Message deleted");
+    qc.invalidateQueries({ queryKey: ["thread-parent", parentId] });
+    qc.invalidateQueries({ queryKey: ["thread-replies", parentId] });
+    qc.invalidateQueries({ queryKey: ["ch-messages", channelId] });
+  };
+
+  const handleReply = (username: string | null, fullName: string) => {
+    const tag = username ? `@${username}` : `@${fullName}`;
+    setBody((prev) => {
+      const trimmed = prev.trim();
+      return trimmed ? `${trimmed} ${tag} ` : `${tag} `;
+    });
+    setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 50);
+  };
+
   return (
     <>
       {/* Mobile backdrop — tapping it closes the panel */}
@@ -91,13 +156,46 @@ export function ThreadPanel({ parentId, channelId, onClose }: { parentId: string
           <div className="text-sm font-semibold">Thread · {replies.length} {replies.length === 1 ? "reply" : "replies"}</div>
           <Button variant="ghost" size="icon" onClick={onClose}><X className="h-4 w-4" /></Button>
         </div>
-        <div ref={scrollRef} className="flex-1 overflow-auto p-3 space-y-3">
-          {parent && <MessageRow m={parent} />}
-          {replies.length > 0 && <div className="border-b text-[10px] text-muted-foreground uppercase tracking-wider py-1">Replies</div>}
-          {replies.map((m) => <MessageRow key={m.id} m={m} />)}
+        <div ref={scrollRef} className="flex-1 overflow-auto p-3 space-y-4 bg-muted/20">
+          {parent && (
+            <MessageRow
+              m={parent}
+              mine={parent.sender_id === employee?.id}
+              isEditing={editingId === parent.id}
+              editBody={editBody}
+              setEditBody={setEditBody}
+              startEdit={startEdit}
+              cancelEdit={cancelEdit}
+              saveEdit={saveEdit}
+              deleteMessage={deleteMessage}
+              onReply={handleReply}
+              employeeId={employee?.id ?? ""}
+              qc={qc}
+            />
+          )}
+          {replies.length > 0 && <div className="border-b text-[10px] text-muted-foreground uppercase tracking-wider py-1 font-semibold">Replies</div>}
+          <div className="space-y-3">
+            {replies.map((m) => (
+              <MessageRow
+                key={m.id}
+                m={m}
+                mine={m.sender_id === employee?.id}
+                isEditing={editingId === m.id}
+                editBody={editBody}
+                setEditBody={setEditBody}
+                startEdit={startEdit}
+                cancelEdit={cancelEdit}
+                saveEdit={saveEdit}
+                deleteMessage={deleteMessage}
+                onReply={handleReply}
+                employeeId={employee?.id ?? ""}
+                qc={qc}
+              />
+            ))}
+          </div>
         </div>
         <div className="border-t p-2 space-y-2">
-          <Textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="Reply…" rows={2} maxLength={4000}
+          <Textarea ref={textareaRef} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Reply…" rows={2} maxLength={4000}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
           <div className="flex justify-end">
             <Button size="sm" onClick={send} disabled={!body.trim()}><Send className="h-3 w-3 mr-1" />Reply</Button>
@@ -108,17 +206,178 @@ export function ThreadPanel({ parentId, channelId, onClose }: { parentId: string
   );
 }
 
-function MessageRow({ m }: { m: ReplyMsg }) {
-  const { employee } = useAuth();
+function MessageRow({
+  m,
+  mine,
+  isEditing,
+  editBody,
+  setEditBody,
+  startEdit,
+  cancelEdit,
+  saveEdit,
+  deleteMessage,
+  onReply,
+  employeeId,
+  qc,
+}: {
+  m: ReplyMsg;
+  mine: boolean;
+  isEditing: boolean;
+  editBody: string;
+  setEditBody: (v: string) => void;
+  startEdit: (m: ReplyMsg) => void;
+  cancelEdit: () => void;
+  saveEdit: (id: string) => Promise<void>;
+  deleteMessage: (id: string) => Promise<void>;
+  onReply: (username: string | null, fullName: string) => void;
+  employeeId: string;
+  qc: any;
+}) {
+  const isDeleted = m.body === "This message has been deleted.";
   return (
-    <div className="text-sm group">
-      <div className="flex items-baseline gap-2">
-        <span className="font-medium">{m.employees?.full_name ?? "—"}</span>
-        <span className="text-[10px] text-muted-foreground">{formatDateTime(m.created_at)}</span>
+    <div className={`flex ${mine ? "justify-end" : "justify-start"} text-sm group`}>
+      <div className="flex flex-col max-w-[85%]">
+        {!mine && (
+          <div className="text-[10px] text-muted-foreground mb-0.5 px-1 flex items-center gap-2">
+            <span className="font-semibold text-foreground/80">{m.employees?.full_name ?? "—"}</span>
+            <span>{formatDateTime(m.created_at)}</span>
+          </div>
+        )}
+        {mine && (
+          <div className="text-[10px] text-muted-foreground mb-0.5 px-1 flex items-center justify-end gap-2">
+            <span>{formatDateTime(m.created_at)}</span>
+          </div>
+        )}
+        {isDeleted ? (
+          <div 
+            className={`relative rounded-2xl py-1.5 px-3 shadow-sm border ${
+              mine
+                ? "bg-primary/85 text-primary-foreground/85 border-primary/10 rounded-tr-none"
+                : "bg-card text-muted-foreground/70 border-border/50 rounded-tl-none"
+            }`}
+          >
+            <div className="leading-relaxed italic select-none">This message has been deleted.</div>
+          </div>
+        ) : (
+          <ContextMenu>
+            <ContextMenuTrigger asChild>
+              <div
+                className={`relative rounded-2xl py-1.5 px-3 shadow-sm border ${
+                  mine
+                    ? "bg-primary text-primary-foreground border-primary/20 rounded-tr-none"
+                    : "bg-card text-card-foreground border-border/50 rounded-tl-none"
+                }`}
+              >
+                {isEditing ? (
+                  <div className="space-y-1.5 min-w-[180px]">
+                    <textarea
+                      className="w-full bg-primary-foreground/10 text-primary-foreground border border-primary-foreground/30 rounded-lg px-2 py-1 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-primary-foreground/50"
+                      rows={2}
+                      value={editBody}
+                      onChange={(e) => setEditBody(e.target.value)}
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") cancelEdit();
+                        if ((e.ctrlKey || e.metaKey) && e.key === "Enter") void saveEdit(m.id);
+                      }}
+                    />
+                    <div className="flex items-center gap-1 justify-end">
+                      <button
+                        onClick={cancelEdit}
+                        className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-primary-foreground/10 hover:bg-primary-foreground/20 text-primary-foreground/80 transition-colors"
+                      >
+                        <X className="h-2.5 w-2.5" /> Cancel
+                      </button>
+                      <button
+                        onClick={() => void saveEdit(m.id)}
+                        disabled={!editBody.trim()}
+                        className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-primary-foreground/20 hover:bg-primary-foreground/30 text-primary-foreground font-semibold disabled:opacity-40 transition-colors"
+                      >
+                        <Check className="h-2.5 w-2.5" /> Save
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="leading-relaxed break-words whitespace-pre-wrap">{renderMessageBody(m.body, mine)}</div>
+                    {!mine && m.edited_at && (
+                      <div className="text-[9px] italic opacity-60 mt-0.5">edited</div>
+                    )}
+                    {mine && m.edited_at && (
+                      <div className="text-[9px] italic opacity-60 mt-0.5 text-right">edited</div>
+                    )}
+                  </>
+                )}
+                <AttachmentList attachments={(m.attachments ?? []) as ChatAttachment[]} />
+                <MessageReactions messageId={m.id} />
+              </div>
+            </ContextMenuTrigger>
+            <ContextMenuContent className="w-48">
+              {mine && !isEditing && (
+                <>
+                  <ContextMenuItem
+                    className="gap-2 cursor-pointer"
+                    onSelect={() => startEdit(m)}
+                  >
+                    <Pencil className="h-4 w-4" />
+                    Edit message
+                  </ContextMenuItem>
+                  <ContextMenuItem
+                    className="gap-2 cursor-pointer text-destructive focus:text-destructive"
+                    onSelect={() => void deleteMessage(m.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete message
+                  </ContextMenuItem>
+                </>
+              )}
+              <ContextMenuItem
+                className="gap-2 cursor-pointer"
+                onSelect={() => onReply(m.employees?.username ?? null, m.employees?.full_name ?? "User")}
+              >
+                <MessageSquare className="h-4 w-4" />
+                Reply
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              <ContextMenuSub>
+                <ContextMenuSubTrigger className="gap-2 cursor-pointer">
+                  <Smile className="h-4 w-4" />
+                  React
+                </ContextMenuSubTrigger>
+                <ContextMenuSubContent className="p-1">
+                  <div className="flex flex-wrap gap-0.5 max-w-[160px]">
+                    {["👍","❤️","😂","🎉","🙏","👀","🔥","✅"].map((emoji) => (
+                      <ContextMenuItem
+                        key={emoji}
+                        className="text-lg p-1.5 rounded cursor-pointer hover:bg-muted justify-center"
+                        onSelect={() => {
+                          void (async () => {
+                            const { data: existing } = await (supabase as any)
+                              .from("message_reactions")
+                              .select("id")
+                              .eq("message_id", m.id)
+                              .eq("employee_id", employeeId)
+                              .eq("emoji", emoji)
+                              .maybeSingle();
+                            if (existing) {
+                              await (supabase as any).from("message_reactions").delete().eq("id", existing.id);
+                            } else {
+                              await (supabase as any).from("message_reactions").insert({ message_id: m.id, employee_id: employeeId, emoji });
+                            }
+                            void qc.invalidateQueries({ queryKey: ["reactions", m.id] });
+                          })();
+                        }}
+                      >
+                        {emoji}
+                      </ContextMenuItem>
+                    ))}
+                  </div>
+                </ContextMenuSubContent>
+              </ContextMenuSub>
+            </ContextMenuContent>
+          </ContextMenu>
+        )}
       </div>
-      <div className="whitespace-pre-wrap">{renderMessageBody(m.body, m.sender_id === employee?.id)}</div>
-      <AttachmentList attachments={(m.attachments ?? []) as ChatAttachment[]} />
-      <MessageReactions messageId={m.id} />
     </div>
   );
 }
