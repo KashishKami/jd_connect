@@ -3,7 +3,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Paperclip, X, FileIcon, Download } from "lucide-react";
 import { toast } from "sonner";
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTrigger, DialogClose } from "@/components/ui/dialog";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 
 export type ChatAttachment = {
   path: string;
@@ -132,20 +138,162 @@ export function AttachmentList({ attachments }: { attachments: ChatAttachment[] 
   );
 }
 
+async function downloadImage(url: string, filename: string) {
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = filename || "download.png";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
+    toast.success("Image download started");
+  } catch (err) {
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.download = filename || "download.png";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    toast.success("Opening image in new window to download");
+  }
+}
+
 function AttachmentItem({ attachment }: { attachment: ChatAttachment }) {
   const url = useSignedUrl(attachment.path);
   const isImage = attachment.type?.startsWith("image/");
+  
+  const [open, setOpen] = useState(false);
+  const [scale, setScale] = useState(1);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    if (!open) {
+      setScale(1);
+      setPosition({ x: 0, y: 0 });
+    }
+  }, [open]);
+
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    const zoomFactor = 0.15;
+    setScale((prev) => {
+      let newScale = prev + (e.deltaY < 0 ? zoomFactor : -zoomFactor);
+      return Math.max(0.5, Math.min(newScale, 5));
+    });
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (scale <= 1) return;
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDragging) return;
+    setPosition({
+      x: e.clientX - dragStart.x,
+      y: e.clientY - dragStart.y,
+    });
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
   if (isImage && url) {
     return (
-      <Dialog>
+      <Dialog open={open} onOpenChange={setOpen}>
         <DialogTrigger asChild>
-          <button className="block rounded border overflow-hidden max-w-xs focus:outline-none focus:ring-2 focus:ring-primary text-left">
-            <img src={url} alt={attachment.name} className="max-h-48 object-cover cursor-pointer hover:opacity-90 transition-opacity" />
-          </button>
+          <div className="inline-block">
+            <ContextMenu>
+              <ContextMenuTrigger asChild>
+                <button className="block rounded border overflow-hidden max-w-xs focus:outline-none focus:ring-2 focus:ring-primary text-left">
+                  <img src={url} alt={attachment.name} className="max-h-48 object-cover cursor-pointer hover:opacity-90 transition-opacity" />
+                </button>
+              </ContextMenuTrigger>
+              <ContextMenuContent className="w-40">
+                <ContextMenuItem 
+                  className="gap-2 cursor-pointer" 
+                  onSelect={() => void downloadImage(url, attachment.name)}
+                >
+                  <Download className="h-4 w-4" />
+                  Download Image
+                </ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenu>
+          </div>
         </DialogTrigger>
-        <DialogContent className="max-w-3xl p-0 overflow-hidden bg-transparent border-none">
-          <div className="relative flex items-center justify-center p-4">
-            <img src={url} alt={attachment.name} className="max-w-full max-h-[85vh] object-contain rounded" />
+        <DialogContent className="max-w-[95vw] md:max-w-5xl lg:max-w-7xl h-[85vh] max-h-[85vh] p-0 overflow-hidden bg-black/95 text-white border-none flex flex-col items-center justify-center">
+          {/* Custom prominent close button to guarantee contrast and z-index visibility */}
+          <DialogClose asChild>
+            <button className="absolute right-4 top-4 z-50 rounded-full p-2 bg-black/50 hover:bg-black/80 text-white/80 hover:text-white transition-colors border border-white/20 cursor-pointer">
+              <X className="h-4 w-4" />
+              <span className="sr-only">Close</span>
+            </button>
+          </DialogClose>
+
+          <ContextMenu>
+            <ContextMenuTrigger asChild>
+              <div 
+                className={`relative w-full h-full flex items-center justify-center p-4 overflow-hidden select-none ${scale > 1 ? "cursor-grab active:cursor-grabbing" : "cursor-default"}`}
+                onWheel={handleWheel}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+              >
+                <img 
+                  src={url} 
+                  alt={attachment.name} 
+                  className="max-w-full max-h-full object-contain rounded transition-transform duration-75 select-none pointer-events-none"
+                  style={{
+                    transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+                  }}
+                />
+              </div>
+            </ContextMenuTrigger>
+            <ContextMenuContent className="w-48">
+              <ContextMenuItem 
+                className="gap-2 cursor-pointer" 
+                onSelect={() => void downloadImage(url, attachment.name)}
+              >
+                <Download className="h-4 w-4" />
+                Download Image
+              </ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
+
+          {/* Floating Controls Bar */}
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 text-white rounded-full px-4 py-1.5 text-xs flex items-center gap-3 backdrop-blur shadow-lg z-50">
+            <span className="font-medium opacity-80">Scroll to Zoom · Drag to Pan</span>
+            <div className="w-[1px] h-3 bg-white/20" />
+            <span className="font-semibold tabular-nums">{Math.round(scale * 100)}%</span>
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                setScale(1);
+                setPosition({ x: 0, y: 0 });
+              }}
+              className="hover:text-primary transition-colors font-bold underline cursor-pointer"
+            >
+              Reset
+            </button>
+            <div className="w-[1px] h-3 bg-white/20" />
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                void downloadImage(url, attachment.name);
+              }}
+              className="hover:text-primary transition-colors font-bold flex items-center gap-1 cursor-pointer"
+            >
+              <Download className="h-3.5 w-3.5" /> Download
+            </button>
           </div>
         </DialogContent>
       </Dialog>
