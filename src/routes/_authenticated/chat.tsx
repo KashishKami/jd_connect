@@ -39,7 +39,7 @@ type Conversation = {
 
 type PublicProfile = { id: string; full_name: string; alias_name: string | null; employee_code: string };
 type LastMsg = { body: string; sender_id: string; created_at: string };
-type MessageMeta = { lastMessages: Record<string, LastMsg>; unreadCounts: Record<string, number> };
+type MessageMeta = { lastMessages: Record<string, LastMsg>; unreadCounts: Record<string, number>; mentions: Record<string, boolean> };
 
 type Message = {
   id: string;
@@ -55,7 +55,7 @@ function initials(n: string) {
   return n.split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
 }
 
-export function ChatPage({ initialConversationId }: { initialConversationId?: string } = {}) {
+export function ChatPage({ initialConversationId, initialMessageId }: { initialConversationId?: string; initialMessageId?: string } = {}) {
   const { employee } = useAuth();
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -112,8 +112,13 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
   });
 
   const convIds = useMemo(() => mineConvs.map((c) => c.id), [mineConvs]);
-  const { data: messageMeta = { lastMessages: {}, unreadCounts: {} } as MessageMeta } = useQuery<MessageMeta>({
-    queryKey: ["chat-message-meta", convIds.join(","), mineConvs.map((c) => c.participants.find((p) => p.employee_id === employee?.id)?.last_read_at ?? "").join(",")],
+  const { data: messageMeta = { lastMessages: {}, unreadCounts: {}, mentions: {} } as MessageMeta } = useQuery<MessageMeta>({
+    queryKey: [
+      "chat-message-meta",
+      employee?.username,
+      convIds.join(","),
+      mineConvs.map((c) => c.participants.find((p) => p.employee_id === employee?.id)?.last_read_at ?? "").join(","),
+    ],
     enabled: convIds.length > 0,
     placeholderData: (prev) => prev,
     queryFn: async () => {
@@ -126,6 +131,7 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
       if (error) throw error;
       const map: Record<string, LastMsg> = {};
       const unreadCounts: Record<string, number> = {};
+      const mentions: Record<string, boolean> = {};
       const lastReadByConversation = new Map(
         mineConvs.map((c) => [c.id, c.participants.find((p) => p.employee_id === employee?.id)?.last_read_at ?? null]),
       );
@@ -140,10 +146,13 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
             : m.status !== "read";
           if (isUnread) {
             unreadCounts[m.conversation_id] = (unreadCounts[m.conversation_id] ?? 0) + 1;
+            if (employee?.username && m.body?.includes(`@${employee.username}`)) {
+              mentions[m.conversation_id] = true;
+            }
           }
         }
       });
-      return { lastMessages: map, unreadCounts };
+      return { lastMessages: map, unreadCounts, mentions };
     },
   });
 
@@ -221,6 +230,7 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
               (others.map((p) => (p.employees?.alias_name || p.employees?.full_name) ?? nameFor(p.employee_id)).filter(Boolean).join(", ") || "Conversation");
             const last = messageMeta.lastMessages[c.id];
             const unreadCount = messageMeta.unreadCounts[c.id] ?? 0;
+            const hasMention = messageMeta.mentions?.[c.id];
             const preview = last
               ? `${last.sender_id === employee?.id ? "You: " : ""}${last.body}`
               : null;
@@ -244,10 +254,19 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
                     <div className={`text-xs truncate ${unreadCount ? "font-medium text-foreground" : "text-muted-foreground"}`}>
                       {preview ?? "No messages yet"}
                     </div>
-                    {unreadCount > 0 && (
-                      <Badge className="h-5 min-w-5 justify-center px-1.5 text-[10px] shrink-0">
-                        {unreadCount > 99 ? "99+" : unreadCount}
-                      </Badge>
+                    {(unreadCount > 0 || hasMention) && (
+                      <div className="flex items-center gap-1 shrink-0">
+                        {hasMention && (
+                          <span className="text-red-600 dark:text-red-500 font-extrabold text-lg mr-0.5 leading-none animate-pulse" title="Mentioned">
+                            @
+                          </span>
+                        )}
+                        {unreadCount > 0 && (
+                          <Badge className="h-5 min-w-5 justify-center px-1.5 text-[10px]">
+                            {unreadCount > 99 ? "99+" : unreadCount}
+                          </Badge>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -259,7 +278,7 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
 
       <Card className={cn("flex flex-col overflow-hidden", activeId ? "flex" : "hidden md:flex")}>
         {activeId ? (
-          <ChatThread conversationId={activeId} onBack={handleBack} />
+          <ChatThread conversationId={activeId} onBack={handleBack} initialMessageId={initialMessageId} />
         ) : (
           <div className="flex-1 grid place-items-center text-muted-foreground text-sm">Select a conversation</div>
         )}
@@ -270,7 +289,7 @@ export function ChatPage({ initialConversationId }: { initialConversationId?: st
   );
 }
 
-function ChatThread({ conversationId, onBack }: { conversationId: string; onBack?: () => void }) {
+function ChatThread({ conversationId, onBack, initialMessageId }: { conversationId: string; onBack?: () => void; initialMessageId?: string }) {
   const { employee } = useAuth();
   const qc = useQueryClient();
   const [body, setBody] = useState("");
@@ -413,6 +432,30 @@ function ChatThread({ conversationId, onBack }: { conversationId: string; onBack
     }
   }, [messages.length, conversationId]);
 
+  // Highlight/scroll to targeted message
+  useEffect(() => {
+    if (initialMessageId && messages.some((m) => m.id === initialMessageId)) {
+      const timer = setTimeout(() => {
+        const el = document.getElementById(`message-${initialMessageId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          const oldBg = el.style.backgroundColor;
+          const oldTransition = el.style.transition;
+          el.style.transition = "background-color 0.2s ease-in-out";
+          el.style.backgroundColor = "#fbbf24"; // Amber highlight
+          const clearHighlight = setTimeout(() => {
+            el.style.backgroundColor = oldBg;
+            setTimeout(() => {
+              el.style.transition = oldTransition;
+            }, 300);
+          }, 1000);
+          return () => clearTimeout(clearHighlight);
+        }
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [messages, conversationId, initialMessageId]);
+
   const send = async () => {
     const text = body.trim();
     if ((!text && attachments.length === 0) || !employee?.id) return;
@@ -507,11 +550,14 @@ function ChatThread({ conversationId, onBack }: { conversationId: string; onBack
             <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
               <ContextMenu>
                 <ContextMenuTrigger asChild>
-                  <div className={`relative max-w-[75%] rounded-2xl py-2 text-sm shadow-sm border select-none ${
-                    mine
-                      ? "bg-primary text-primary-foreground border-primary/20 rounded-tr-none pl-4 pr-2.5"
-                      : "bg-card text-card-foreground border-border/50 rounded-tl-none pl-3 pr-4"
-                  }`}>
+                  <div 
+                    id={`message-${m.id}`}
+                    className={`relative max-w-[75%] rounded-2xl py-2 text-sm shadow-sm border ${
+                      mine
+                        ? "bg-primary text-primary-foreground border-primary/20 rounded-tr-none pl-4 pr-2.5"
+                        : "bg-card text-card-foreground border-border/50 rounded-tl-none pl-3 pr-4"
+                    }`}
+                  >
                     {/* Message body — normal or edit mode */}
                     {isEditing ? (
                       <div className="space-y-1.5">
@@ -600,6 +646,7 @@ function ChatThread({ conversationId, onBack }: { conversationId: string; onBack
                                 } else {
                                   await (supabase as any).from("message_reactions").insert({ message_id: m.id, employee_id: employee?.id, emoji });
                                 }
+                                void qc.invalidateQueries({ queryKey: ["reactions", m.id] });
                               })();
                             }}
                           >

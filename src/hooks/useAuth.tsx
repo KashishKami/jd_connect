@@ -9,6 +9,7 @@ interface EmployeeProfile {
   employee_code: string;
   full_name: string;
   alias_name: string | null;
+  username: string | null;
   role_id: string | null;
   department_id: string | null;
   centre_id: string | null;
@@ -42,7 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       supabase.from("user_roles").select("role").eq("user_id", uid),
       supabase
         .from("employees")
-        .select("id, employee_code, full_name, alias_name, role_id, department_id, centre_id, designation")
+        .select("id, employee_code, full_name, alias_name, username, role_id, department_id, centre_id, designation")
         .eq("auth_user_id", uid)
         .maybeSingle(),
     ]);

@@ -98,14 +98,16 @@ function SearchPage() {
                     <div className="text-xs text-muted-foreground mb-0.5">{formatDateTime(m.created_at)} {m.channel_id ? "· in channel" : "· direct message"}</div>
                     <div className="text-sm line-clamp-2">{m.body}</div>
                     {m.channel_id && (
-                      <Link to="/channels/$channelId" params={{ channelId: m.channel_id }} className="text-xs text-primary hover:underline">Open channel →</Link>
+                      <Link to="/channels/$channelId" params={{ channelId: m.channel_id }} search={{ messageId: m.id }} className="text-xs text-primary hover:underline block mt-1">Open channel →</Link>
+                    )}
+                    {m.conversation_id && (
+                      <Link to="/chat/$conversationId" params={{ conversationId: m.conversation_id }} search={{ messageId: m.id }} className="text-xs text-primary hover:underline block mt-1">Open DM →</Link>
                     )}
                   </div>
                 ))}
               </CardContent>
             </Card>
           )}
-
           {data.documents.length > 0 && (
             <Card>
               <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><BookOpen className="h-4 w-4" />Knowledge Base</CardTitle></CardHeader>

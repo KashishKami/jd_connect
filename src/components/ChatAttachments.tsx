@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Paperclip, X, FileIcon, Download } from "lucide-react";
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 
 export type ChatAttachment = {
   path: string;
@@ -100,7 +101,7 @@ export function PendingAttachmentList({
   );
 }
 
-function PendingImageItem({ attachment }: { attachment: ChatAttachment }) {
+export function PendingImageItem({ attachment }: { attachment: ChatAttachment }) {
   const url = useSignedUrl(attachment.path);
   if (!url) return <div className="h-24 w-24 bg-muted animate-pulse rounded" />;
   return (
@@ -110,7 +111,7 @@ function PendingImageItem({ attachment }: { attachment: ChatAttachment }) {
   );
 }
 
-function useSignedUrl(path: string) {
+export function useSignedUrl(path: string) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -136,9 +137,18 @@ function AttachmentItem({ attachment }: { attachment: ChatAttachment }) {
   const isImage = attachment.type?.startsWith("image/");
   if (isImage && url) {
     return (
-      <a href={url} target="_blank" rel="noreferrer" className="block rounded border overflow-hidden max-w-xs">
-        <img src={url} alt={attachment.name} className="max-h-48 object-cover" />
-      </a>
+      <Dialog>
+        <DialogTrigger asChild>
+          <button className="block rounded border overflow-hidden max-w-xs focus:outline-none focus:ring-2 focus:ring-primary text-left">
+            <img src={url} alt={attachment.name} className="max-h-48 object-cover cursor-pointer hover:opacity-90 transition-opacity" />
+          </button>
+        </DialogTrigger>
+        <DialogContent className="max-w-3xl p-0 overflow-hidden bg-transparent border-none">
+          <div className="relative flex items-center justify-center p-4">
+            <img src={url} alt={attachment.name} className="max-w-full max-h-[85vh] object-contain rounded" />
+          </div>
+        </DialogContent>
+      </Dialog>
     );
   }
   return (

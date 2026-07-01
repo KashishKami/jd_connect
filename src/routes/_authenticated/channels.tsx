@@ -95,7 +95,7 @@ type JoinRequest = {
   requested_at: string;
 };
 
-export function ChannelsPage({ initialChannelId }: { initialChannelId?: string } = {}) {
+export function ChannelsPage({ initialChannelId, initialMessageId }: { initialChannelId?: string; initialMessageId?: string } = {}) {
   const { employee, hasRole, isAdmin, refresh } = useAuth();
   const { can } = usePermissions();
   const qc = useQueryClient();
@@ -132,10 +132,14 @@ export function ChannelsPage({ initialChannelId }: { initialChannelId?: string }
   });
 
   const channelIds = channels.map((c) => c.id).sort();
-  const { data: channelUnreadCounts = {} } = useQuery<Record<string, number>>({
+  const { data: channelUnreadMeta = { counts: {}, mentions: {} } } = useQuery<{
+    counts: Record<string, number>;
+    mentions: Record<string, boolean>;
+  }>({
     queryKey: [
-      "channel-unread-counts",
+      "channel-unread-meta",
       employee?.id,
+      employee?.username,
       channelIds.join(","),
       channels.map((c) => c.members.find((m) => m.employee_id === employee?.id)?.last_read_at ?? "").join(","),
     ],
@@ -143,7 +147,7 @@ export function ChannelsPage({ initialChannelId }: { initialChannelId?: string }
     queryFn: async () => {
       const { data, error } = await supabase
         .from("messages")
-        .select("channel_id, sender_id, created_at")
+        .select("channel_id, sender_id, created_at, body")
         .in("channel_id", channelIds)
         .order("created_at", { ascending: false })
         .limit(500);
@@ -152,14 +156,18 @@ export function ChannelsPage({ initialChannelId }: { initialChannelId?: string }
         channels.map((c) => [c.id, c.members.find((m) => m.employee_id === employee?.id)?.last_read_at ?? null]),
       );
       const counts: Record<string, number> = {};
+      const mentions: Record<string, boolean> = {};
       (data ?? []).forEach((m) => {
         if (!m.channel_id || m.sender_id === employee?.id) return;
         const lastReadAt = lastReadByChannel.get(m.channel_id);
         if (!lastReadAt || new Date(m.created_at).getTime() > new Date(lastReadAt).getTime()) {
           counts[m.channel_id] = (counts[m.channel_id] ?? 0) + 1;
+          if (employee?.username && (m.body?.includes(`@${employee.username}`) || m.body?.includes("@all"))) {
+            mentions[m.channel_id] = true;
+          }
         }
       });
-      return counts;
+      return { counts, mentions };
     },
   });
 
@@ -197,7 +205,8 @@ export function ChannelsPage({ initialChannelId }: { initialChannelId?: string }
     : [];
 
   const renderChannelRow = (c: Channel) => {
-    const unreadCount = channelUnreadCounts[c.id] ?? 0;
+    const unreadCount = channelUnreadMeta.counts[c.id] ?? 0;
+    const hasMention = channelUnreadMeta.mentions[c.id];
     return (
       <div
         key={c.id}
@@ -214,11 +223,18 @@ export function ChannelsPage({ initialChannelId }: { initialChannelId?: string }
           >
             {c.name}
           </span>
-          {unreadCount > 0 && (
-            <Badge className="h-5 min-w-5 justify-center px-1.5 text-[10px] shrink-0">
-              {unreadCount > 99 ? "99+" : unreadCount}
-            </Badge>
-          )}
+          <div className="flex items-center gap-1 shrink-0">
+            {hasMention && (
+              <span className="text-red-600 dark:text-red-500 font-extrabold text-lg mr-0.5 leading-none animate-pulse" title="Mentioned">
+                @
+              </span>
+            )}
+            {unreadCount > 0 && (
+              <Badge className="h-5 min-w-5 justify-center px-1.5 text-[10px]">
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </Badge>
+            )}
+          </div>
           <Badge variant="secondary" className="text-[10px] shrink-0">
             {c.channel_type}
           </Badge>
@@ -306,7 +322,7 @@ export function ChannelsPage({ initialChannelId }: { initialChannelId?: string }
       </Card>
       <Card className={cn("flex flex-col overflow-hidden", activeId ? "flex" : "hidden md:flex")}>
         {activeId ? (
-          <ChannelThread channelId={activeId} onBack={handleBack} />
+          <ChannelThread channelId={activeId} onBack={handleBack} initialMessageId={initialMessageId} />
         ) : (
           <div className="flex-1 grid place-items-center text-muted-foreground text-sm">Select a channel</div>
         )}
@@ -315,7 +331,7 @@ export function ChannelsPage({ initialChannelId }: { initialChannelId?: string }
   );
 }
 
-function ChannelThread({ channelId, onBack }: { channelId: string; onBack?: () => void }) {
+function ChannelThread({ channelId, onBack, initialMessageId }: { channelId: string; onBack?: () => void; initialMessageId?: string }) {
   const { employee, isAdmin, hasRole } = useAuth();
   const { can } = usePermissions();
   const qc = useQueryClient();
@@ -466,6 +482,30 @@ function ChannelThread({ channelId, onBack }: { channelId: string; onBack?: () =
       scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
     }
   }, [messages.length, channelId]);
+
+  // Highlight/scroll to targeted message
+  useEffect(() => {
+    if (initialMessageId && messages.some((m) => m.id === initialMessageId)) {
+      const timer = setTimeout(() => {
+        const el = document.getElementById(`message-${initialMessageId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          const oldBg = el.style.backgroundColor;
+          const oldTransition = el.style.transition;
+          el.style.transition = "background-color 0.2s ease-in-out";
+          el.style.backgroundColor = "#fbbf24"; // Amber highlight
+          const clearHighlight = setTimeout(() => {
+            el.style.backgroundColor = oldBg;
+            setTimeout(() => {
+              el.style.transition = oldTransition;
+            }, 300);
+          }, 1000);
+          return () => clearTimeout(clearHighlight);
+        }
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [messages, channelId, initialMessageId]);
 
   const send = async () => {
     const text = body.trim();
@@ -620,11 +660,14 @@ function ChannelThread({ channelId, onBack }: { channelId: string; onBack?: () =
 
                   <ContextMenu>
                     <ContextMenuTrigger asChild>
-                      <div className={`relative rounded-2xl py-2 px-3 text-sm shadow-sm border select-none ${
-                        mine
-                          ? "bg-primary text-primary-foreground border-primary/20 rounded-tr-none"
-                          : "bg-card text-card-foreground border-border/50 rounded-tl-none"
-                      }`}>
+                      <div 
+                        id={`message-${m.id}`}
+                        className={`relative rounded-2xl py-2 px-3 text-sm shadow-sm border ${
+                          mine
+                            ? "bg-primary text-primary-foreground border-primary/20 rounded-tr-none"
+                            : "bg-card text-card-foreground border-border/50 rounded-tl-none"
+                        }`}
+                      >
                         {/* Message body — normal or edit mode */}
                         {isEditing ? (
                           <div className="space-y-1.5">
