@@ -96,7 +96,7 @@ function SearchPage() {
                 {data.messages.map((m) => (
                   <div key={m.id} className="p-2 rounded hover:bg-muted">
                     <div className="text-xs text-muted-foreground mb-0.5">{formatDateTime(m.created_at)} {m.channel_id ? "· in channel" : "· direct message"}</div>
-                    <div className="text-sm line-clamp-2">{m.body}</div>
+                    <div className="text-sm line-clamp-2">{m.body.replace(/\[QUOTE\|.*?\]\n?/g, "")}</div>
                     {m.channel_id && (
                       <Link to="/channels/$channelId" params={{ channelId: m.channel_id }} search={{ messageId: m.id }} className="text-xs text-primary hover:underline block mt-1">Open channel →</Link>
                     )}

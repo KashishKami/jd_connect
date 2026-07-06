@@ -156,18 +156,89 @@ function processChildren(children: React.ReactNode, isCurrentUser?: boolean): Re
   return children;
 }
 
+export function encodeQuote(msgId: string, senderName: string, body: string): string {
+  const cleanBody = body.replace(/\[QUOTE\|.*?\]\n?/g, "");
+  const truncated = cleanBody.length > 200 ? cleanBody.slice(0, 200) + "..." : cleanBody;
+  const safeSender = senderName.replace(/\|/g, "-");
+  const safeBody = truncated.replace(/\|/g, "-").replace(/\n/g, " ");
+  return `[QUOTE|${msgId}|${safeSender}|${safeBody}]\n`;
+}
+
+export type ParsedQuote = {
+  msgId: string;
+  senderName: string;
+  quoteBody: string;
+  remainingText: string;
+};
+
+export function parseQuote(body: string): ParsedQuote | null {
+  if (!body.startsWith("[QUOTE|")) return null;
+  let closingIdx = body.indexOf("]\n");
+  let newlineLen = 2;
+  if (closingIdx === -1) {
+    closingIdx = body.indexOf("]\r\n");
+    newlineLen = 3;
+  }
+  if (closingIdx === -1) {
+    closingIdx = body.indexOf("]");
+    newlineLen = 1;
+  }
+  if (closingIdx === -1) return null;
+  const quotePart = body.slice(7, closingIdx);
+  const remainingText = body.slice(closingIdx + newlineLen).replace(/^[\r\n]+/, "");
+  const parts = quotePart.split("|");
+  if (parts.length < 3) return null;
+  const msgId = parts[0];
+  const senderName = parts[1];
+  const quoteBody = parts.slice(2).join("|");
+  return { msgId, senderName, quoteBody, remainingText };
+}
+
+export function stripQuote(body: string | null | undefined): string {
+  if (!body) return "";
+  return body.replace(/\[QUOTE\|.*?\][\r\n]*/g, "");
+}
+
 export function renderMessageBody(body: string, isCurrentUser?: boolean) {
+  const parsed = parseQuote(body);
+  const displayBody = parsed ? parsed.remainingText : body;
   return (
-    <div className="prose prose-sm dark:prose-invert max-w-none break-words [&_p]:my-1 [&_h1]:text-base [&_h2]:text-sm [&_h1]:mt-1 [&_h2]:mt-1 [&_ul]:my-1 [&_ol]:my-1 [&_pre]:my-1">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          p: ({ children }) => <p>{processChildren(children, isCurrentUser)}</p>,
-          li: ({ children }) => <li>{processChildren(children, isCurrentUser)}</li>,
-        }}
-      >
-        {body}
-      </ReactMarkdown>
+    <div className="space-y-1">
+      {parsed && (
+        <div
+          onClick={() => {
+            const el = document.getElementById(`message-${parsed.msgId}`);
+            if (el) {
+              el.scrollIntoView({ behavior: "smooth", block: "center" });
+              const oldBg = el.style.backgroundColor;
+              const oldTransition = el.style.transition;
+              el.style.transition = "background-color 0.2s ease-in-out";
+              el.style.backgroundColor = "#fbbf24";
+              setTimeout(() => {
+                el.style.backgroundColor = oldBg;
+                setTimeout(() => {
+                  el.style.transition = oldTransition;
+                }, 300);
+              }, 1000);
+            }
+          }}
+          className={`border-l-4 ${isCurrentUser ? "border-primary-foreground/40 bg-primary-foreground/10 text-primary-foreground" : "border-primary/50 bg-primary/5 text-foreground"} rounded-r-md px-3 py-1 text-xs cursor-pointer opacity-90 select-none max-w-full`}
+        >
+          <div className="font-semibold text-[10px] uppercase tracking-wider">{parsed.senderName}</div>
+          <div className="truncate text-[11px] opacity-80">{parsed.quoteBody}</div>
+        </div>
+      )}
+      <div className="prose prose-sm dark:prose-invert max-w-none break-words [&_p]:my-1 [&_h1]:text-base [&_h2]:text-sm [&_h1]:mt-1 [&_h2]:mt-1 [&_ul]:my-1 [&_ol]:my-1 [&_pre]:my-1">
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            p: ({ children }) => <p>{processChildren(children, isCurrentUser)}</p>,
+            li: ({ children }) => <li>{processChildren(children, isCurrentUser)}</li>,
+          }}
+        >
+          {displayBody}
+        </ReactMarkdown>
+      </div>
     </div>
   );
 }

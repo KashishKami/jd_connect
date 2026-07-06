@@ -45,7 +45,7 @@ import {
   Smile,
 } from "lucide-react";
 import { toast } from "sonner";
-import { MentionInput, renderMessageBody } from "@/components/MentionInput";
+import { MentionInput, renderMessageBody, encodeQuote } from "@/components/MentionInput";
 import { MessageReactions } from "@/components/MessageReactions";
 import { AttachmentPicker, AttachmentList, PendingAttachmentList, type ChatAttachment, uploadFiles } from "@/components/ChatAttachments";
 import { ThreadPanel } from "@/components/ThreadPanel";
@@ -348,14 +348,27 @@ function ChannelThread({ channelId, onBack, initialMessageId }: { channelId: str
   const [olderMessages, setOlderMessages] = useState<Msg[]>([]);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
+  const [replyTo, setReplyTo] = useState<{ id: string; body: string; senderName: string } | null>(null);
   const canModerate = isAdmin || hasRole("manager") || hasRole("team_leader") || can("channels.moderate");
 
   // Reset pagination when switching channels
   useEffect(() => {
     setOlderMessages([]);
     setHasMoreMessages(true);
+    setReplyTo(null);
     lastScrollChannelId.current = null;
   }, [channelId]);
+
+  // Handle escape key to cancel reply quote
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && replyTo) {
+        setReplyTo(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [replyTo]);
 
   // Membership check (drives whether messages render or a "request to join" panel)
   const { data: membership, isLoading: isMembershipLoading } = useQuery({
@@ -562,9 +575,11 @@ function ChannelThread({ channelId, onBack, initialMessageId }: { channelId: str
     setBody("");
     const atts = attachments;
     setAttachments([]);
+    const finalBody = replyTo ? encodeQuote(replyTo.id, replyTo.senderName, replyTo.body) + text : text;
+    setReplyTo(null);
     const { error } = await supabase
       .from("messages")
-      .insert({ channel_id: channelId, sender_id: employee.id, body: text, attachments: atts });
+      .insert({ channel_id: channelId, sender_id: employee.id, body: finalBody, attachments: atts });
     if (error) {
       toast.error(error.message);
       setBody(text);
@@ -651,6 +666,7 @@ function ChannelThread({ channelId, onBack, initialMessageId }: { channelId: str
   }
 
   const pinned = messages.filter((m) => m.is_pinned);
+  const allChatImages = messages.flatMap((m) => m.attachments ?? []).filter((a) => a.type?.startsWith("image/"));
 
   return (
     <div className="flex h-full">
@@ -803,7 +819,7 @@ function ChannelThread({ channelId, onBack, initialMessageId }: { channelId: str
                               )}
                             </>
                           )}
-                          <AttachmentList attachments={(m.attachments ?? []) as ChatAttachment[]} />
+                          <AttachmentList attachments={(m.attachments ?? []) as ChatAttachment[]} allChatImages={allChatImages} />
                           <MessageReactions messageId={m.id} />
 
                           {/* Thread reply indicator */}
@@ -847,6 +863,16 @@ function ChannelThread({ channelId, onBack, initialMessageId }: { channelId: str
                             </ContextMenuItem>
                           </>
                         )}
+                        <ContextMenuItem
+                          className="gap-2 cursor-pointer"
+                          onSelect={() => {
+                            const senderName = senders[m.sender_id] ?? "User";
+                            setReplyTo({ id: m.id, body: m.body, senderName });
+                          }}
+                        >
+                          <MessageSquare className="h-4 w-4" />
+                          Reply to message
+                        </ContextMenuItem>
                         <ContextMenuItem
                           className="gap-2 cursor-pointer"
                           onSelect={() => setThreadParentId(m.id)}
@@ -909,6 +935,17 @@ function ChannelThread({ channelId, onBack, initialMessageId }: { channelId: str
           {!isThreadLoading && messages.length === 0 && <p className="text-center text-sm text-muted-foreground py-10">No messages yet.</p>}
         </div>
         <div className="border-t p-3 space-y-2 bg-card shadow-inner" onPaste={handlePaste}>
+          {replyTo && (
+            <div className="flex items-center justify-between gap-2 px-3 py-1 text-xs bg-muted border-l-4 border-primary rounded-r-md">
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-[10px] text-primary uppercase">Replying to {replyTo.senderName}</div>
+                <div className="truncate text-muted-foreground">{replyTo.body.replace(/\[QUOTE\|.*?\]\n?/g, "")}</div>
+              </div>
+              <button onClick={() => setReplyTo(null)} className="p-0.5 hover:bg-muted-foreground/10 rounded">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
           <PendingAttachmentList
             attachments={attachments}
             onRemove={async (att) => {

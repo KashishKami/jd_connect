@@ -218,6 +218,7 @@ export function ChatNotifier() {
           sender_id: string;
           body: string;
           created_at: string;
+          parent_message_id: string | null;
         };
         if (m.sender_id === employee.id) return;
 
@@ -226,6 +227,26 @@ export function ChatNotifier() {
         if (!targetId) return;
         if (isDirect && !myConvIds.current.has(targetId)) return;
         if (!isDirect && !myChannelIds.current.has(targetId)) return;
+
+        // Check if user is @mentioned in this message
+        const isMentioned = !!(employee.username && (
+          m.body.includes(`@${employee.username}`) || m.body.includes("@all")
+        ));
+
+        let isThreadReply = !!m.parent_message_id;
+        let isParentAuthor = false;
+
+        if (isThreadReply && m.parent_message_id) {
+          const { data: parent } = await supabase
+            .from("messages")
+            .select("sender_id")
+            .eq("id", m.parent_message_id)
+            .maybeSingle();
+          isParentAuthor = parent?.sender_id === employee.id;
+
+          // For thread replies, only notify if user is parent author or @mentioned
+          if (!isParentAuthor && !isMentioned) return;
+        }
 
         // Suppress notifications ONLY if the chat is open AND the window is focused/visible
         const isPageActive = isDirect
@@ -259,18 +280,38 @@ export function ChatNotifier() {
         }
         const channelName = !isDirect ? (channelNames.current.get(targetId) ?? "channel") : null;
 
+        // Clean quote block if present
+        let displayBody = m.body;
+        if (displayBody.startsWith("[QUOTE|")) {
+          const closingIdx = displayBody.indexOf("]\n");
+          if (closingIdx !== -1) {
+            displayBody = displayBody.slice(closingIdx + 2);
+          }
+        }
+
+        let title = "";
+        if (isThreadReply) {
+          title = isMentioned
+            ? `📢 Mention in thread: ${isDirect ? senderName : "#" + channelName}`
+            : `💬 Thread reply from ${senderName}`;
+        } else if (isMentioned) {
+          title = `📢 Mention: ${isDirect ? senderName : "#" + channelName}`;
+        } else {
+          title = isDirect ? senderName : `#${channelName}`;
+        }
+
         const incoming: Incoming = {
           kind: isDirect ? "direct" : "channel",
           targetId,
           messageId: m.id,
           senderId: m.sender_id,
           senderName,
-          title: isDirect ? senderName : `#${channelName}`,
-          body: m.body,
+          title,
+          body: displayBody,
           at: m.created_at,
         };
 
-         void qc.invalidateQueries({ queryKey: ["notifications"] });
+        void qc.invalidateQueries({ queryKey: ["notifications"] });
         void qc.invalidateQueries({ queryKey: ["comm-unread"] });
         if (incoming.kind === "direct") {
           void qc.invalidateQueries({ queryKey: ["messages", incoming.targetId] });

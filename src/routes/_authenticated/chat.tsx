@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Send, Search, MessageSquarePlus, Circle, Check, CheckCheck, User, Info, ArrowLeft, Pencil, X as XIcon, Smile, Trash2 } from "lucide-react";
+import { Send, Search, MessageSquarePlus, MessageSquare, Circle, Check, CheckCheck, User, Info, ArrowLeft, Pencil, X as XIcon, Smile, Trash2 } from "lucide-react";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { MentionInput, renderMessageBody } from "@/components/MentionInput";
+import { MentionInput, renderMessageBody, encodeQuote, stripQuote } from "@/components/MentionInput";
 import { MessageReactions } from "@/components/MessageReactions";
 import { AttachmentPicker, AttachmentList, PendingAttachmentList, type ChatAttachment, uploadFiles } from "@/components/ChatAttachments";
 
@@ -232,7 +232,7 @@ export function ChatPage({ initialConversationId, initialMessageId }: { initialC
             const unreadCount = messageMeta.unreadCounts[c.id] ?? 0;
             const hasMention = messageMeta.mentions?.[c.id];
             const preview = last
-              ? `${last.sender_id === employee?.id ? "You: " : ""}${last.body}`
+              ? `${last.sender_id === employee?.id ? "You: " : ""}${stripQuote(last.body)}`
               : null;
             return (
               <button
@@ -304,13 +304,26 @@ function ChatThread({ conversationId, onBack, initialMessageId }: { conversation
   const [olderMessages, setOlderMessages] = useState<Message[]>([]);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
+  const [replyTo, setReplyTo] = useState<{ id: string; body: string; senderName: string } | null>(null);
 
   // Reset pagination when switching conversations
   useEffect(() => {
     setOlderMessages([]);
     setHasMoreMessages(true);
+    setReplyTo(null);
     lastScrollConvId.current = null;
   }, [conversationId]);
+
+  // Handle escape key to cancel reply quote
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && replyTo) {
+        setReplyTo(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [replyTo]);
 
   // Fetch conversation and participant metadata
   const { data: conversation } = useQuery({
@@ -387,6 +400,15 @@ function ChatThread({ conversationId, onBack, initialMessageId }: { conversation
 
   // Combined view: older pages prepended before the live window
   const messages = [...olderMessages, ...latestMessages];
+  const allChatImages = messages.flatMap((m) => m.attachments ?? []).filter((a) => a.type?.startsWith("image/"));
+
+  const getSenderName = (senderId: string) => {
+    if (senderId === employee?.id) return employee?.alias_name || employee?.full_name || "You";
+    const part = conversation?.participants.find((p) => p.employee_id === senderId);
+    if (part?.employees) return part.employees.alias_name || part.employees.full_name;
+    if (senderId === otherId && otherPublicProfile) return otherPublicProfile.alias_name || otherPublicProfile.full_name;
+    return "User";
+  };
 
   // Load older messages using a created_at cursor
   const loadOlderMessages = useCallback(async () => {
@@ -509,8 +531,10 @@ function ChatThread({ conversationId, onBack, initialMessageId }: { conversation
     setBody("");
     const atts = attachments;
     setAttachments([]);
+    const finalBody = replyTo ? encodeQuote(replyTo.id, replyTo.senderName, replyTo.body) + text : text;
+    setReplyTo(null);
     const { error } = await supabase.from("messages").insert({
-      conversation_id: conversationId, sender_id: employee.id, body: text, status: "sent", attachments: atts,
+      conversation_id: conversationId, sender_id: employee.id, body: finalBody, status: "sent", attachments: atts,
     });
     if (error) { toast.error(error.message); setBody(text); setAttachments(atts); }
   };
@@ -679,7 +703,7 @@ function ChatThread({ conversationId, onBack, initialMessageId }: { conversation
                         <div className="leading-relaxed">{renderMessageBody(m.body, mine)}</div>
                       )}
 
-                      <AttachmentList attachments={(m.attachments ?? []) as ChatAttachment[]} />
+                      <AttachmentList attachments={(m.attachments ?? []) as ChatAttachment[]} allChatImages={allChatImages} />
                       <div className="text-[10px] mt-1.5 flex items-center justify-end select-none gap-1 opacity-70">
                         {m.edited_at && (
                           <span className="italic opacity-80">edited ·</span>
@@ -717,6 +741,16 @@ function ChatThread({ conversationId, onBack, initialMessageId }: { conversation
                         </ContextMenuItem>
                       </>
                     )}
+                    <ContextMenuItem
+                      className="gap-2 cursor-pointer"
+                      onSelect={() => {
+                        const senderName = getSenderName(m.sender_id);
+                        setReplyTo({ id: m.id, body: m.body, senderName });
+                      }}
+                    >
+                      <MessageSquare className="h-4 w-4" />
+                      Reply to message
+                    </ContextMenuItem>
                     <ContextMenuSub>
                       <ContextMenuSubTrigger className="gap-2 cursor-pointer">
                         <Smile className="h-4 w-4" />
@@ -761,6 +795,17 @@ function ChatThread({ conversationId, onBack, initialMessageId }: { conversation
         {!isLoading && messages.length === 0 && <p className="text-center text-sm text-muted-foreground py-10">Say hello 👋</p>}
       </div>
       <div className="border-t p-3 space-y-2 bg-card shadow-inner" onPaste={handlePaste}>
+        {replyTo && (
+          <div className="flex items-center justify-between gap-2 px-3 py-1 text-xs bg-muted border-l-4 border-primary rounded-r-md">
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-[10px] text-primary uppercase">Replying to {replyTo.senderName}</div>
+              <div className="truncate text-muted-foreground">{replyTo.body.replace(/\[QUOTE\|.*?\]\n?/g, "")}</div>
+            </div>
+            <button onClick={() => setReplyTo(null)} className="p-0.5 hover:bg-muted-foreground/10 rounded">
+              <XIcon className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
         <PendingAttachmentList
           attachments={attachments}
           onRemove={async (att) => {

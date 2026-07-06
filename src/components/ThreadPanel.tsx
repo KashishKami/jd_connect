@@ -4,11 +4,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { X, Send, Pencil, Trash2, Smile, MessageSquare, Check } from "lucide-react";
 import { MessageReactions } from "@/components/MessageReactions";
 import { AttachmentList, type ChatAttachment } from "@/components/ChatAttachments";
-import { renderMessageBody } from "@/components/MentionInput";
+import { renderMessageBody, MentionInput, MentionInputHandle, encodeQuote } from "@/components/MentionInput";
 import { toast } from "sonner";
 import {
   ContextMenu,
@@ -40,17 +39,30 @@ export function ThreadPanel({ parentId, channelId, onClose }: { parentId: string
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editBody, setEditBody] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<MentionInputHandle>(null);
   const prevScrollHeight = useRef<number>(0);
   const [olderReplies, setOlderReplies] = useState<ReplyMsg[]>([]);
   const [hasMoreReplies, setHasMoreReplies] = useState(true);
   const [loadingOlderReplies, setLoadingOlderReplies] = useState(false);
+  const [replyTo, setReplyTo] = useState<{ id: string; body: string; senderName: string } | null>(null);
 
   // Reset pagination when switching threads
   useEffect(() => {
     setOlderReplies([]);
     setHasMoreReplies(true);
+    setReplyTo(null);
   }, [parentId]);
+
+  // Handle escape key to cancel reply quote
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && replyTo) {
+        setReplyTo(null);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [replyTo]);
 
   const { data: parent } = useQuery({
     queryKey: ["thread-parent", parentId],
@@ -132,10 +144,12 @@ export function ThreadPanel({ parentId, channelId, onClose }: { parentId: string
     const text = body.trim();
     if (!text || !employee?.id) return;
     setBody("");
+    const finalBody = replyTo ? encodeQuote(replyTo.id, replyTo.senderName, replyTo.body) + text : text;
+    setReplyTo(null);
     const { error } = await supabase.from("messages").insert({
       channel_id: channelId,
       sender_id: employee.id,
-      body: text,
+      body: finalBody,
       parent_message_id: parentId,
     });
     if (error) { toast.error(error.message); setBody(text); }
@@ -185,9 +199,15 @@ export function ThreadPanel({ parentId, channelId, onClose }: { parentId: string
       return trimmed ? `${trimmed} ${tag} ` : `${tag} `;
     });
     setTimeout(() => {
-      textareaRef.current?.focus();
+      inputRef.current?.focus();
     }, 50);
   };
+
+  // Compile all images in the thread for the slideshow gallery
+  const allChatImages = [
+    ...(parent?.attachments ?? []),
+    ...replies.flatMap((r) => r.attachments ?? []),
+  ].filter((a) => a.type?.startsWith("image/"));
 
   return (
     <>
@@ -228,8 +248,10 @@ export function ThreadPanel({ parentId, channelId, onClose }: { parentId: string
               saveEdit={saveEdit}
               deleteMessage={deleteMessage}
               onReply={handleReply}
+              onQuoteReply={(id, b, sender) => setReplyTo({ id, body: b, senderName: sender })}
               employeeId={employee?.id ?? ""}
               qc={qc}
+              allChatImages={allChatImages}
             />
           )}
           {replies.length > 0 && <div className="border-b text-[10px] text-muted-foreground uppercase tracking-wider py-1 font-semibold">Replies</div>}
@@ -247,17 +269,38 @@ export function ThreadPanel({ parentId, channelId, onClose }: { parentId: string
                 saveEdit={saveEdit}
                 deleteMessage={deleteMessage}
                 onReply={handleReply}
+                onQuoteReply={(id, b, sender) => setReplyTo({ id, body: b, senderName: sender })}
                 employeeId={employee?.id ?? ""}
                 qc={qc}
+                allChatImages={allChatImages}
               />
             ))}
           </div>
         </div>
         <div className="border-t p-2 space-y-2">
-          <Textarea ref={textareaRef} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Reply…" rows={2} maxLength={4000}
-            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }} />
-          <div className="flex justify-end">
-            <Button size="sm" onClick={send} disabled={!body.trim()}><Send className="h-3 w-3 mr-1" />Reply</Button>
+          {replyTo && (
+            <div className="flex items-center justify-between gap-2 px-3 py-1 text-xs bg-muted border-l-4 border-primary rounded-r-md">
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-[10px] text-primary uppercase">Replying to {replyTo.senderName}</div>
+                <div className="truncate text-muted-foreground">{replyTo.body.replace(/\[QUOTE\|.*?\]\n?/g, "")}</div>
+              </div>
+              <button onClick={() => setReplyTo(null)} className="p-0.5 hover:bg-muted-foreground/10 rounded">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+          <div className="flex gap-2 items-center">
+            <MentionInput
+              ref={inputRef}
+              value={body}
+              onChange={setBody}
+              onSubmit={send}
+              placeholder="Reply…"
+              maxLength={4000}
+            />
+            <Button size="sm" onClick={send} disabled={!body.trim()} className="shrink-0">
+              <Send className="h-4 w-4" />
+            </Button>
           </div>
         </div>
       </div>
@@ -276,8 +319,10 @@ function MessageRow({
   saveEdit,
   deleteMessage,
   onReply,
+  onQuoteReply,
   employeeId,
   qc,
+  allChatImages,
 }: {
   m: ReplyMsg;
   mine: boolean;
@@ -289,8 +334,10 @@ function MessageRow({
   saveEdit: (id: string) => Promise<void>;
   deleteMessage: (id: string) => Promise<void>;
   onReply: (username: string | null, fullName: string) => void;
+  onQuoteReply: (id: string, body: string, senderName: string) => void;
   employeeId: string;
   qc: any;
+  allChatImages: ChatAttachment[];
 }) {
   const isDeleted = m.body === "This message has been deleted.";
   return (
@@ -367,7 +414,7 @@ function MessageRow({
                     )}
                   </>
                 )}
-                <AttachmentList attachments={(m.attachments ?? []) as ChatAttachment[]} />
+                <AttachmentList attachments={(m.attachments ?? []) as ChatAttachment[]} allChatImages={allChatImages} />
                 <MessageReactions messageId={m.id} />
               </div>
             </ContextMenuTrigger>
@@ -390,6 +437,13 @@ function MessageRow({
                   </ContextMenuItem>
                 </>
               )}
+              <ContextMenuItem
+                className="gap-2 cursor-pointer"
+                onSelect={() => onQuoteReply(m.id, m.body, m.employees?.full_name ?? "User")}
+              >
+                <MessageSquare className="h-4 w-4" />
+                Reply to message
+              </ContextMenuItem>
               <ContextMenuItem
                 className="gap-2 cursor-pointer"
                 onSelect={() => onReply(m.employees?.username ?? null, m.employees?.full_name ?? "User")}
