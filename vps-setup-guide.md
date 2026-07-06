@@ -148,6 +148,22 @@ To enable automatic deployment, go to your repository on **GitHub** -> **Setting
 | `PROD_SUPABASE_ANON_KEY` | Your production anon API key | `eyJhbGciOiJIUzI1Ni...` |
 | `PROD_SUPABASE_SERVICE_ROLE_KEY` | Your production service_role API key | `eyJhbGciOiJIUzI1Ni...` |
 
+### How to Generate your `GHCR_TOKEN` (GitHub Personal Access Token)
+
+1. Log into your **GitHub account**.
+2. Click on your profile picture in the top-right corner and click **Settings**.
+3. Scroll to the bottom of the left sidebar and click **Developer settings**.
+4. In the left sidebar, expand **Personal Access Tokens** and click on **Tokens (classic)**.
+5. Click the **Generate new token** button in the top-right and choose **Generate new token (classic)**.
+6. Fill in the fields:
+   * **Note:** `JD-Connect-VPS-Access`
+   * **Expiration:** Select **No expiration** (or a duration of your choice).
+   * **Scopes (Permissions):** Check the boxes for:
+     * `[x] repo` (grants access to pull your private repository code onto the VPS)
+     * `[x] write:packages` (grants access to upload and download your Docker containers)
+7. Scroll to the bottom and click **Generate token**.
+8. **Copy the token immediately** (it starts with `ghp_...`). You will not be able to see it again once you close the page.
+
 ---
 
 ## Frequently Asked Questions (FAQ)
@@ -165,4 +181,16 @@ This is the URL where your application contacts the Supabase API.
 * **Resource Conservation:** Compiling a modern web application (running `bun install` and `vite build`) is highly CPU and RAM intensive. Low-end VPS instances (1GB to 4GB RAM) will frequently crash with **Out Of Memory (OOM)** errors during builds, taking your entire website offline. Building on GitHub's free runners saves your VPS's memory and CPU.
 * **Instant Deployments:** Compiling code takes 2 to 3 minutes, during which your VPS would be heavily loaded. Pulling a pre-built image takes 5 to 10 seconds, meaning near zero downtime.
 * **Build Consistency:** Building once on GitHub guarantees that the container running on production is identical to the one tested, avoiding any "works on my machine but fails on production" environment bugs.
+
+### 4. Should my GitHub repository be public or private?
+* **Recommendation:** Since this is an internal business/employee portal containing custom company policies, security groups, and settings, it is **highly recommended to keep the repository private** so your code and commit history are secure.
+* **Compatibility:** Our setup is fully compatible with both public and private repositories. If you make it private, the `GHCR_TOKEN` with `repo` scope will allow the VPS to clone/pull code securely.
+
+### 5. What if my GitHub Actions or Package storage gets filled up?
+* **If Public:** GitHub Actions and Package Registry storage are **100% free and unlimited** for public repositories.
+* **If Private:** GitHub provides 500MB of free storage for private package registries. Each time a new build runs, the tag `latest` is moved to the new image, leaving the old image untagged (orphaned).
+* **Cleaning up old images:**
+  1. **On GitHub:** You can configure a periodic workflow or use the GitHub Packages UI to delete older, untagged images.
+  2. **On the VPS:** Docker keeps older images on your disk when new ones are pulled, which can fill up your VPS hard drive. You can clear them from your VPS by running a prune command periodically (e.g. `docker image prune -a -f`).
+
 

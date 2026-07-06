@@ -55,10 +55,11 @@ jobs:
             
             # Sync repository code (for compose files)
             if [ -d ".git" ]; then
+              git remote set-url origin https://${{ github.actor }}:${{ secrets.GHCR_TOKEN }}@github.com/${{ github.repository }}.git
               git fetch --all
               git reset --hard origin/main
             else
-              git clone https://github.com/${{ github.repository }}.git .
+              git clone https://${{ github.actor }}:${{ secrets.GHCR_TOKEN }}@github.com/${{ github.repository }}.git .
             fi
             
             # Login to GHCR on the VPS

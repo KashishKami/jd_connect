@@ -1,0 +1,37 @@
+# Exclude git directories
+.git
+.github
+.gitignore
+
+# Exclude local editor and system files
+.vscode
+.lovable
+.DS_Store
+Thumbs.db
+
+# Exclude local build artifacts and caches
+dist
+.output
+.tanstack
+node_modules
+bun.lock
+
+# Exclude desktop/tauri files (only needed for desktop build, not SSR web server)
+src-tauri
+.tauri-signing-key
+.tauri-signing-key.pub
+
+# Exclude Docker infra, volumes, and database backups
+docker-infra
+jd-connect-backup
+production
+
+# Exclude local environment configs and secret keys
+.env
+.env*.local
+
+# Exclude documentation files and guides
+*.md
+app-icon.png
+scripts
+FINDINGS
