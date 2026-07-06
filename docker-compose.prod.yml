@@ -1,0 +1,33 @@
+version: '3.8'
+
+networks:
+  jdconnect_net:
+    name: jdconnect_net
+    external: true
+  traefik_proxy:
+    external: true
+
+services:
+  app:
+    image: ghcr.io/kashishkami/jd-connect:${IMAGE_TAG:-latest}
+    container_name: jdconnect-app
+    restart: unless-stopped
+    ports:
+      - "19003:19003"
+    networks:
+      - jdconnect_net
+      - traefik_proxy
+    environment:
+      NODE_ENV: production
+      PORT: 19003
+      # Runtime server-side variables
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+    labels:
+      - "traefik.enable=true"
+      # Replace jdconnect.yourdomain.com with your actual domain when pointing DNS
+      - "traefik.http.routers.jdconnect.rule=Host(`jdconnect.yourdomain.com`)"
+      - "traefik.http.routers.jdconnect.entrypoints=websecure"
+      - "traefik.http.routers.jdconnect.tls.certresolver=letsencrypt"
+      - "traefik.http.services.jdconnect.loadbalancer.server.port=19003"
+      - "traefik.docker.network=traefik_proxy"

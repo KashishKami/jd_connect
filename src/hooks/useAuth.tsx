@@ -81,10 +81,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Single-active-session enforcement: poll every 30s
   useEffect(() => {
     if (!user) return;
-    const localId = localStorage.getItem(SESSION_KEY);
-    // If this device has no stored session token, skip enforcement entirely
-    // (e.g. old browser tab that predates this feature)
-    if (!localId) return;
 
     const check = async () => {
       // Re-read localStorage each time — login on another tab updates it
@@ -92,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!token) return; // token was cleared, don't self-kick
       const { data: ok, error } = await supabase.rpc("is_current_session", { _token: token });
       if (ok === false || error) {
-        await supabase.auth.signOut();
+        await supabase.auth.signOut({ scope: "local" });
         localStorage.removeItem(SESSION_KEY);
         window.location.href = "/auth" + (error ? "" : "?reason=session-replaced");
       }
@@ -145,7 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await supabase.from("employee_sessions").update({ is_active: false }).eq("user_id", user.id);
     }
     localStorage.removeItem(SESSION_KEY);
-    await supabase.auth.signOut();
+    await supabase.auth.signOut({ scope: "local" });
     window.location.href = "/auth";
   };
 

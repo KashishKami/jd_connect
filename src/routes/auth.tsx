@@ -134,7 +134,7 @@ export function AuthPage() {
         const ipCheck = await checkIpRestriction();
         if (!ipCheck.allowed) {
           toast.error("Access denied: Your IP address is not whitelisted.");
-          await supabase.auth.signOut();
+          await supabase.auth.signOut({ scope: "local" });
           return;
         }
       } catch (ipErr) {
