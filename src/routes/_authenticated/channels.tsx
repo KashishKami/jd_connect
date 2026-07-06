@@ -1,6 +1,6 @@
 import { formatDate, formatDateTime, cn } from "@/lib/utils";
 import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -150,7 +150,7 @@ export function ChannelsPage({ initialChannelId, initialMessageId }: { initialCh
         .select("channel_id, sender_id, created_at, body")
         .in("channel_id", channelIds)
         .order("created_at", { ascending: false })
-        .limit(500);
+        .limit(2000);
       if (error) throw error;
       const lastReadByChannel = new Map(
         channels.map((c) => [c.id, c.members.find((m) => m.employee_id === employee?.id)?.last_read_at ?? null]),
@@ -331,6 +331,8 @@ export function ChannelsPage({ initialChannelId, initialMessageId }: { initialCh
   );
 }
 
+const CH_PAGE_SIZE = 100;
+
 function ChannelThread({ channelId, onBack, initialMessageId }: { channelId: string; onBack?: () => void; initialMessageId?: string }) {
   const { employee, isAdmin, hasRole } = useAuth();
   const { can } = usePermissions();
@@ -342,7 +344,18 @@ function ChannelThread({ channelId, onBack, initialMessageId }: { channelId: str
   const [editBody, setEditBody] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastScrollChannelId = useRef<string | null>(null);
+  const prevScrollHeight = useRef<number>(0);
+  const [olderMessages, setOlderMessages] = useState<Msg[]>([]);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const canModerate = isAdmin || hasRole("manager") || hasRole("team_leader") || can("channels.moderate");
+
+  // Reset pagination when switching channels
+  useEffect(() => {
+    setOlderMessages([]);
+    setHasMoreMessages(true);
+    lastScrollChannelId.current = null;
+  }, [channelId]);
 
   // Membership check (drives whether messages render or a "request to join" panel)
   const { data: membership, isLoading: isMembershipLoading } = useQuery({
@@ -367,7 +380,8 @@ function ChannelThread({ channelId, onBack, initialMessageId }: { channelId: str
     },
   });
 
-  const { data: messages = [], isLoading: isMessagesLoading } = useQuery({
+  // Fetch newest CH_PAGE_SIZE messages (DESC), reverse for display
+  const { data: latestMessages = [], isLoading: isMessagesLoading } = useQuery({
     queryKey: ["ch-messages", channelId],
     enabled: membership === true,
     queryFn: async () => {
@@ -376,17 +390,52 @@ function ChannelThread({ channelId, onBack, initialMessageId }: { channelId: str
         .select("id, body, sender_id, created_at, is_pinned, attachments, parent_message_id, edited_at, replies:messages!parent_message_id(count)")
         .eq("channel_id", channelId)
         .is("parent_message_id", null)
-        .order("created_at", { ascending: true })
-        .limit(200);
+        .order("created_at", { ascending: false })
+        .limit(CH_PAGE_SIZE);
       if (error) throw error;
-      return ((data ?? []) as any[]).map((m) => ({
-        ...m,
-        reply_count: (m.replies?.[0]?.count ?? 0) as number,
-      })) as Msg[];
+      return ((data ?? []) as any[])
+        .map((m) => ({ ...m, reply_count: (m.replies?.[0]?.count ?? 0) as number }))
+        .reverse() as Msg[];
     },
   });
 
+  // Combined view: older pages prepended before the live window
+  const messages = [...olderMessages, ...latestMessages];
+
   const isThreadLoading = isMembershipLoading || (membership === true && isMessagesLoading);
+
+  // Load older messages using a created_at cursor
+  const loadOlderMessages = useCallback(async () => {
+    const cursor = messages[0]?.created_at;
+    if (!cursor || loadingOlderMessages) return;
+    prevScrollHeight.current = scrollRef.current?.scrollHeight ?? 0;
+    setLoadingOlderMessages(true);
+    const { data, error } = await supabase
+      .from("messages")
+      .select("id, body, sender_id, created_at, is_pinned, attachments, parent_message_id, edited_at, replies:messages!parent_message_id(count)")
+      .eq("channel_id", channelId)
+      .is("parent_message_id", null)
+      .lt("created_at", cursor)
+      .order("created_at", { ascending: false })
+      .limit(CH_PAGE_SIZE);
+    setLoadingOlderMessages(false);
+    if (error) { toast.error(error.message); return; }
+    const page = ((data ?? []) as any[])
+      .map((m) => ({ ...m, reply_count: (m.replies?.[0]?.count ?? 0) as number }))
+      .reverse() as Msg[];
+    if (page.length < CH_PAGE_SIZE) setHasMoreMessages(false);
+    setOlderMessages((prev) => [...page, ...prev]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channelId, loadingOlderMessages, messages[0]?.created_at]);
+
+  // Restore scroll position after prepending older messages
+  useEffect(() => {
+    if (!scrollRef.current || prevScrollHeight.current === 0) return;
+    const delta = scrollRef.current.scrollHeight - prevScrollHeight.current;
+    scrollRef.current.scrollTop += delta;
+    prevScrollHeight.current = 0;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [olderMessages.length]);
 
   const senderIds = Array.from(new Set(messages.map((m) => m.sender_id))).sort();
   const { data: senders = {} } = useQuery({
@@ -649,6 +698,18 @@ function ChannelThread({ channelId, onBack, initialMessageId }: { channelId: str
           </div>
         )}
         <div ref={scrollRef} className="flex-1 overflow-auto p-4 space-y-4 bg-[#eef2f6] dark:bg-[#0b0f17]">
+          {/* Load older messages button */}
+          {hasMoreMessages && latestMessages.length >= CH_PAGE_SIZE && (
+            <div className="flex justify-center pt-1 pb-2">
+              <button
+                onClick={() => void loadOlderMessages()}
+                disabled={loadingOlderMessages}
+                className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-muted hover:bg-muted/80 text-muted-foreground font-medium transition-colors disabled:opacity-50"
+              >
+                {loadingOlderMessages ? "Loading…" : "Load older messages"}
+              </button>
+            </div>
+          )}
           {messages.map((m) => {
             const mine = m.sender_id === employee?.id;
             const isEditing = editingId === m.id;

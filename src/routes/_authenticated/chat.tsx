@@ -1,5 +1,5 @@
 import { createFileRoute, Outlet, useNavigate, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -289,6 +289,8 @@ export function ChatPage({ initialConversationId, initialMessageId }: { initialC
   );
 }
 
+const DM_PAGE_SIZE = 100;
+
 function ChatThread({ conversationId, onBack, initialMessageId }: { conversationId: string; onBack?: () => void; initialMessageId?: string }) {
   const { employee } = useAuth();
   const qc = useQueryClient();
@@ -298,6 +300,17 @@ function ChatThread({ conversationId, onBack, initialMessageId }: { conversation
   const [editBody, setEditBody] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastScrollConvId = useRef<string | null>(null);
+  const prevScrollHeight = useRef<number>(0);
+  const [olderMessages, setOlderMessages] = useState<Message[]>([]);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
+
+  // Reset pagination when switching conversations
+  useEffect(() => {
+    setOlderMessages([]);
+    setHasMoreMessages(true);
+    lastScrollConvId.current = null;
+  }, [conversationId]);
 
   // Fetch conversation and participant metadata
   const { data: conversation } = useQuery({
@@ -357,19 +370,53 @@ function ChatThread({ conversationId, onBack, initialMessageId }: { conversation
     return parts.join(" · ");
   }, [conversation, otherParticipant, otherPublicProfile]);
 
-  const { data: messages = [], isLoading } = useQuery({
+  // Fetch newest DM_PAGE_SIZE messages (DESC), reverse for display
+  const { data: latestMessages = [], isLoading } = useQuery({
     queryKey: ["messages", conversationId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("messages")
         .select("id, body, sender_id, created_at, status, attachments, edited_at")
         .eq("conversation_id", conversationId)
-        .order("created_at", { ascending: true })
-        .limit(200);
+        .order("created_at", { ascending: false })
+        .limit(DM_PAGE_SIZE);
       if (error) throw error;
-      return (data ?? []) as Message[];
+      return ((data ?? []) as Message[]).reverse();
     },
   });
+
+  // Combined view: older pages prepended before the live window
+  const messages = [...olderMessages, ...latestMessages];
+
+  // Load older messages using a created_at cursor
+  const loadOlderMessages = useCallback(async () => {
+    const cursor = messages[0]?.created_at;
+    if (!cursor || loadingOlderMessages) return;
+    prevScrollHeight.current = scrollRef.current?.scrollHeight ?? 0;
+    setLoadingOlderMessages(true);
+    const { data, error } = await supabase
+      .from("messages")
+      .select("id, body, sender_id, created_at, status, attachments, edited_at")
+      .eq("conversation_id", conversationId)
+      .lt("created_at", cursor)
+      .order("created_at", { ascending: false })
+      .limit(DM_PAGE_SIZE);
+    setLoadingOlderMessages(false);
+    if (error) { toast.error(error.message); return; }
+    const page = ((data ?? []) as Message[]).reverse();
+    if (page.length < DM_PAGE_SIZE) setHasMoreMessages(false);
+    setOlderMessages((prev) => [...page, ...prev]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId, loadingOlderMessages, messages[0]?.created_at]);
+
+  // Restore scroll position after prepending older messages
+  useEffect(() => {
+    if (!scrollRef.current || prevScrollHeight.current === 0) return;
+    const delta = scrollRef.current.scrollHeight - prevScrollHeight.current;
+    scrollRef.current.scrollTop += delta;
+    prevScrollHeight.current = 0;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [olderMessages.length]);
 
   useEffect(() => {
     if (!employee?.id) return;
@@ -553,6 +600,18 @@ function ChatThread({ conversationId, onBack, initialMessageId }: { conversation
 
       {/* Messages viewport */}
       <div ref={scrollRef} className="flex-1 overflow-auto p-4 space-y-3 bg-[#eef2f6] dark:bg-[#0b0f17]">
+        {/* Load older messages button */}
+        {hasMoreMessages && latestMessages.length >= DM_PAGE_SIZE && (
+          <div className="flex justify-center pt-1 pb-2">
+            <button
+              onClick={() => void loadOlderMessages()}
+              disabled={loadingOlderMessages}
+              className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-muted hover:bg-muted/80 text-muted-foreground font-medium transition-colors disabled:opacity-50"
+            >
+              {loadingOlderMessages ? "Loading…" : "Load older messages"}
+            </button>
+          </div>
+        )}
         {messages.map((m) => {
           const mine = m.sender_id === employee?.id;
           const isEditing = editingId === m.id;

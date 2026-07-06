@@ -1,5 +1,5 @@
 import { formatDateTime } from "@/lib/utils";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -31,6 +31,8 @@ type ReplyMsg = {
   edited_at?: string | null;
 };
 
+const THREAD_PAGE_SIZE = 100;
+
 export function ThreadPanel({ parentId, channelId, onClose }: { parentId: string; channelId: string; onClose: () => void }) {
   const { employee } = useAuth();
   const qc = useQueryClient();
@@ -39,6 +41,16 @@ export function ThreadPanel({ parentId, channelId, onClose }: { parentId: string
   const [editBody, setEditBody] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const prevScrollHeight = useRef<number>(0);
+  const [olderReplies, setOlderReplies] = useState<ReplyMsg[]>([]);
+  const [hasMoreReplies, setHasMoreReplies] = useState(true);
+  const [loadingOlderReplies, setLoadingOlderReplies] = useState(false);
+
+  // Reset pagination when switching threads
+  useEffect(() => {
+    setOlderReplies([]);
+    setHasMoreReplies(true);
+  }, [parentId]);
 
   const { data: parent } = useQuery({
     queryKey: ["thread-parent", parentId],
@@ -52,18 +64,53 @@ export function ThreadPanel({ parentId, channelId, onClose }: { parentId: string
     },
   });
 
-  const { data: replies = [] } = useQuery({
+  // Fetch newest THREAD_PAGE_SIZE replies (DESC), reverse for display
+  const { data: latestReplies = [] } = useQuery({
     queryKey: ["thread-replies", parentId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("messages")
         .select("id, body, sender_id, created_at, attachments, edited_at, employees!messages_sender_id_fkey(full_name, username)")
         .eq("parent_message_id", parentId)
-        .order("created_at", { ascending: true });
+        .order("created_at", { ascending: false })
+        .limit(THREAD_PAGE_SIZE);
       if (error) throw error;
-      return (data ?? []) as unknown as ReplyMsg[];
+      return ((data ?? []) as unknown as ReplyMsg[]).reverse();
     },
   });
+
+  // Combined view: older pages prepended before the live window
+  const replies = [...olderReplies, ...latestReplies];
+
+  // Load older replies using a created_at cursor
+  const loadOlderReplies = useCallback(async () => {
+    const cursor = replies[0]?.created_at;
+    if (!cursor || loadingOlderReplies) return;
+    prevScrollHeight.current = scrollRef.current?.scrollHeight ?? 0;
+    setLoadingOlderReplies(true);
+    const { data, error } = await supabase
+      .from("messages")
+      .select("id, body, sender_id, created_at, attachments, edited_at, employees!messages_sender_id_fkey(full_name, username)")
+      .eq("parent_message_id", parentId)
+      .lt("created_at", cursor)
+      .order("created_at", { ascending: false })
+      .limit(THREAD_PAGE_SIZE);
+    setLoadingOlderReplies(false);
+    if (error) { toast.error(error.message); return; }
+    const page = ((data ?? []) as unknown as ReplyMsg[]).reverse();
+    if (page.length < THREAD_PAGE_SIZE) setHasMoreReplies(false);
+    setOlderReplies((prev) => [...page, ...prev]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [parentId, loadingOlderReplies, replies[0]?.created_at]);
+
+  // Restore scroll position after prepending older replies
+  useEffect(() => {
+    if (!scrollRef.current || prevScrollHeight.current === 0) return;
+    const delta = scrollRef.current.scrollHeight - prevScrollHeight.current;
+    scrollRef.current.scrollTop += delta;
+    prevScrollHeight.current = 0;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [olderReplies.length]);
 
   useEffect(() => {
     const ch = supabase.channel(`thread-${parentId}`)
@@ -157,6 +204,18 @@ export function ThreadPanel({ parentId, channelId, onClose }: { parentId: string
           <Button variant="ghost" size="icon" onClick={onClose}><X className="h-4 w-4" /></Button>
         </div>
         <div ref={scrollRef} className="flex-1 overflow-auto p-3 space-y-4 bg-muted/20">
+          {/* Load older replies button */}
+          {hasMoreReplies && latestReplies.length >= THREAD_PAGE_SIZE && (
+            <div className="flex justify-center pt-1 pb-1">
+              <button
+                onClick={() => void loadOlderReplies()}
+                disabled={loadingOlderReplies}
+                className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full bg-muted hover:bg-muted/80 text-muted-foreground font-medium transition-colors disabled:opacity-50"
+              >
+                {loadingOlderReplies ? "Loading…" : "Load older replies"}
+              </button>
+            </div>
+          )}
           {parent && (
             <MessageRow
               m={parent}
