@@ -12,6 +12,7 @@ const Entity = z.enum([
   "break_type",
   "role",
   "channel",
+  "allowed_ips",
 ]);
 
 const Input = z.object({ entity: Entity, id: z.string().uuid() });
@@ -100,6 +101,7 @@ export const deleteAdminEntity = createServerFn({ method: "POST" })
         case "break_type": return supabaseAdmin.from("break_types").delete().eq("id", data.id);
         case "role": return supabaseAdmin.from("roles").delete().eq("id", data.id);
         case "channel": return supabaseAdmin.from("channels").delete().eq("id", data.id);
+        case "allowed_ips": return supabaseAdmin.from("allowed_ips").delete().eq("id", data.id);
         default: throw new Error("Unsupported entity");
       }
     };

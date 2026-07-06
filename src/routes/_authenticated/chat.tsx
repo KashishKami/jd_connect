@@ -536,7 +536,14 @@ function ChatThread({ conversationId, onBack, initialMessageId }: { conversation
     const { error } = await supabase.from("messages").insert({
       conversation_id: conversationId, sender_id: employee.id, body: finalBody, status: "sent", attachments: atts,
     });
-    if (error) { toast.error(error.message); setBody(text); setAttachments(atts); }
+    if (error) {
+      toast.error(error.message);
+      setBody(text);
+      setAttachments(atts);
+    } else {
+      void qc.invalidateQueries({ queryKey: ["messages", conversationId] });
+      void qc.invalidateQueries({ queryKey: ["chat-message-meta"] });
+    }
   };
 
   const startEdit = (m: Message) => {

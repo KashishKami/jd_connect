@@ -152,7 +152,12 @@ export function ThreadPanel({ parentId, channelId, onClose }: { parentId: string
       body: finalBody,
       parent_message_id: parentId,
     });
-    if (error) { toast.error(error.message); setBody(text); }
+    if (error) {
+      toast.error(error.message);
+      setBody(text);
+    } else {
+      void qc.invalidateQueries({ queryKey: ["thread-replies", parentId] });
+    }
   };
 
   const startEdit = (m: ReplyMsg) => {

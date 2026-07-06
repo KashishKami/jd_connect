@@ -90,11 +90,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Re-read localStorage each time — login on another tab updates it
       const token = localStorage.getItem(SESSION_KEY);
       if (!token) return; // token was cleared, don't self-kick
-      const { data: ok } = await supabase.rpc("is_current_session", { _token: token });
-      if (ok === false) {
+      const { data: ok, error } = await supabase.rpc("is_current_session", { _token: token });
+      if (ok === false || error) {
         await supabase.auth.signOut();
         localStorage.removeItem(SESSION_KEY);
-        window.location.href = "/auth?reason=session-replaced";
+        window.location.href = "/auth" + (error ? "" : "?reason=session-replaced");
       }
     };
 

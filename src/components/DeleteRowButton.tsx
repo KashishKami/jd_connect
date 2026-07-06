@@ -13,7 +13,7 @@ import { useAuth } from "@/hooks/useAuth";
 
 type Entity =
   | "employee" | "centre" | "department" | "shift" | "holiday"
-  | "sales_source" | "break_type" | "role" | "channel";
+  | "sales_source" | "break_type" | "role" | "channel" | "allowed_ips";
 
 export function DeleteRowButton({
   entity, id, label, invalidateKeys, size = "sm", alreadyTerminated = false,
