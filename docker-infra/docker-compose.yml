@@ -61,6 +61,21 @@ services:
 
       SNIPPETS_MANAGEMENT_FOLDER: /app/snippets
       EDGE_FUNCTIONS_MANAGEMENT_FOLDER: /app/edge-functions
+    networks:
+      - default
+      - root_default
+    labels:
+      - "traefik.enable=true"
+      # Replace studio.yourdomain.com with your actual domain
+      - "traefik.http.routers.supabase-studio.rule=Host(`studio.yourdomain.com`)"
+      - "traefik.http.routers.supabase-studio.entrypoints=websecure"
+      - "traefik.http.routers.supabase-studio.tls.certresolver=mytlschallenge"
+      # Internal port Studio listens on inside the container
+      - "traefik.http.services.supabase-studio.loadbalancer.server.port=3000"
+      - "traefik.docker.network=root_default"
+      # Restrict Studio access to your admin IP only (replace with your IP)
+      - "traefik.http.middlewares.studio-ipwhitelist.ipwhitelist.sourcerange=YOUR.ADMIN.IP.HERE/32"
+      - "traefik.http.routers.supabase-studio.middlewares=studio-ipwhitelist"
     volumes:
       - ./volumes/snippets:/app/snippets:z
       - ./volumes/functions:/app/edge-functions:ro,z
@@ -73,6 +88,8 @@ services:
       default:
         aliases:
           - api-gw
+      root_default: {}
+
     healthcheck:
       test: ["CMD", "kong", "health"]
       interval: 5s
@@ -110,6 +127,15 @@ services:
       DASHBOARD_USERNAME: ${DASHBOARD_USERNAME}
       DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD}
     entrypoint: ["/bin/sh", "/home/kong/kong-entrypoint.sh"]
+    labels:
+      - "traefik.enable=true"
+      # Replace supabase.yourdomain.com with your actual domain
+      - "traefik.http.routers.supabase-api.rule=Host(`supabase.yourdomain.com`)"
+      - "traefik.http.routers.supabase-api.entrypoints=websecure"
+      - "traefik.http.routers.supabase-api.tls.certresolver=mytlschallenge"
+      # Kong's internal HTTP port (Traefik handles TLS — Kong receives plain HTTP inside the network)
+      - "traefik.http.services.supabase-api.loadbalancer.server.port=8000"
+      - "traefik.docker.network=root_default"
 
   auth:
     container_name: supabase-auth
@@ -584,3 +610,10 @@ services:
 volumes:
   db-config:
   deno-cache:
+
+networks:
+  # The network used by the existing Traefik reverse proxy on this VPS.
+  # Confirmed name: root_default (from 'docker inspect root-traefik-1').
+  # Certresolver: mytlschallenge (HTTP-01 challenge via port 80).
+  root_default:
+    external: true

@@ -6,13 +6,41 @@ This guide will walk you through setting up your Hostinger VPS (Virtual Private 
 ---
 
 ## Table of Contents
+0. [Concept: How the Deployment Flow Works](#concept-how-the-deployment-flow-works-code-vs-database)
 1. [Step 1: Generate SSH Keys on Windows](#step-1-generate-ssh-keys-on-windows)
 2. [Step 2: Add your SSH Key to Hostinger Panel](#step-2-add-your-ssh-key-to-hostinger-panel)
-3. [Step 3: Connect to your VPS via SSH](#step-3-connect-to-your-vps-via-ssh)
-4. [Step 4: Install Docker on the VPS](#step-4-install-docker-on-the-vps)
-5. [Step 5: Create folder structure on the VPS](#step-5-create-folder-structure-on-the-vps)
-6. [Step 6: Copy and Restore your Database Backup](#step-6-copy-and-restore-your-database-backup)
-7. [Step 7: Configure GitHub Actions Secrets](#step-7-configure-github-actions-secrets)
+3. [Step 3: Connect to your VPS via SSH & Install Docker](#step-3-connect-to-your-vps-via-ssh--install-docker)
+4. [Step 4: Create the Project Directory on the VPS](#step-4-create-the-project-directory-on-the-vps)
+5. [Step 5: Identify Traefik Network & Create App Network](#step-5-identify-traefik-network--create-app-network)
+6. [Step 6: Configure GitHub Secrets & Push Code](#step-6-configure-github-secrets--push-code)
+7. [Step 7: Start your Supabase Database Stack](#step-7-start-your-supabase-database-stack)
+8. [Step 8: Upload and Restore Database Backup](#step-8-upload-and-restore-database-backup)
+9. [Phase 3: DNS Cutover & Traefik SSL](#phase-3-dns-cutover--traefik-ssl)
+
+---
+
+## Concept: How the Deployment Flow Works (Code vs. Database)
+
+Before setting up your VPS, it is important to understand how your self-hosted backend, frontend web application, and the deployment pipeline interact:
+
+### 1. Two Independent Docker Stacks on the VPS
+Your server will run two separate, isolated Docker Compose setups:
+* **The Supabase Backend (`docker-infra/docker-compose.yml`)**: This starts the database, auth, and storage services. You will configure and start this **manually, once** on the VPS via SSH. Pushing code updates will **never** touch or restart your database containers, keeping your data safe and online.
+* **The App Service (`docker-compose.prod.yml`)**: This runs your actual frontend/SSR web application. It is managed **automatically** by your GitHub Actions deployment pipeline on every code push.
+
+### 2. How Code and Container Images get to the VPS
+When you run a `git push` to your GitHub repository:
+1. **GitHub Actions (The Builder)**: Downloads your code on a GitHub server runner, runs `bun install` and `vite build` (doing the heavy CPU/RAM compilation work), packages the finished app into a **Docker Image**, and uploads it to GitHub Container Registry (GHCR).
+2. **Your VPS (The Host)**: GitHub Actions SSHs into your VPS and:
+   * Runs `git clone` or `git pull` on the VPS to download your code repository files (which gives the VPS access to your `.yml` compose files, scripts, and SQL configuration).
+   * Pulls the pre-built **Docker Image** from GHCR.
+   * Restarts **only the app container**, resulting in a fast deployment with near-zero downtime.
+
+### 3. How Traefik Routes Traffic
+Your VPS already runs a **Traefik** reverse proxy that handles all incoming HTTPS traffic for your other applications. You do **not** need to install it again. The JD Connect app container registers itself with Traefik automatically through **Docker labels** in `docker-compose.prod.yml`. When Traefik sees those labels it:
+* Creates a router rule for your domain (e.g. `jdconnect.yourdomain.com`)
+* Automatically issues a free Let's Encrypt SSL certificate
+* Forwards HTTPS traffic from port 443 to the container's internal port `19003` — through the Docker network, not a public host port
 
 ---
 
@@ -38,84 +66,168 @@ SSH keys are a secure way to log into your VPS without typing a password every t
 ## Step 2: Add your SSH Key to Hostinger Panel
 
 1. Log into your **Hostinger Account Dashboard**.
-2. Go to **VPS** -> select your VPS server.
-3. In the left sidebar, click on **Settings** -> **SSH Keys**.
+2. Go to **VPS** → select your VPS server.
+3. In the left sidebar, click on **Settings** → **SSH Keys**.
 4. Click **Add SSH Key**.
 5. Give it a name (e.g., `My-Windows-PC`) and **paste** the public key you copied in Step 1.
 6. Save the settings. Hostinger will automatically append this key to the root user's authorized keys on the server.
 
 ---
 
-## Step 3: Connect to your VPS via SSH
-
-Now you can log into your server directly from PowerShell without typing a password.
+## Step 3: Connect to your VPS via SSH & Install Docker
 
 1. Open **PowerShell** on your Windows PC.
-2. Run this command (replace `<YOUR_VPS_IP>` with your actual Hostinger VPS IP address):
+2. Log into your server (replace `<YOUR_VPS_IP>` with your Hostinger VPS IP):
    ```powershell
    ssh root@<YOUR_VPS_IP>
    ```
-3. If it asks you if you want to continue connecting (authenticity warning), type `yes` and press **Enter**.
-4. You should now see the welcome banner of your Ubuntu server, ending with `root@hsvp...:~#`.
-
----
-
-## Step 4: Install Docker on the VPS
-
-Your Hostinger VPS needs Docker and Docker Compose to run the containers. Run these commands sequentially inside your SSH terminal:
-
-1. **Update the system package index:**
+3. Once logged into the VPS SSH terminal, update packages and install Docker:
    ```bash
    apt-get update && apt-get upgrade -y
-   ```
-2. **Install Docker using the official automated script:**
-   ```bash
    curl -fsSL https://get.docker.com -o get-docker.sh
    sh get-docker.sh
    ```
-3. **Verify Docker is installed successfully:**
+4. Verify both are installed:
    ```bash
    docker --version
    docker compose version
    ```
-   *(You should see Docker version 24+ and Docker Compose v2+).*
 
 ---
 
-## Step 5: Create folder structure on the VPS
+## Step 4: Create the Project Directory on the VPS
 
-To match your local machine exactly, we will create the folder `/opt/jd-connect/`. Run this inside your SSH terminal:
+Create the directory where your repository will live on the VPS. Run this inside the VPS SSH terminal:
 
 ```bash
 mkdir -p /opt/jd-connect
 ```
 
-Your VPS folders will align like this:
-* **`/opt/jd-connect/`** — Project root (managed by Git/GitHub Actions).
-* **`/opt/jd-connect/docker-infra/`** — Contains the Supabase Docker Compose files.
-* **`/opt/jd-connect/docker-infra/.env`** — Contains production DB passwords and JWT keys.
+*(You don't need to manually clone or copy your project files here. The GitHub Actions deployment workflow will clone your files into this directory automatically on your first code push.)*
 
 ---
 
-## Step 6: Copy and Restore your Database Backup
+## Step 5: Identify Traefik Network & Create App Network
 
-We will copy the backup file from your Windows desktop to the VPS, then restore it into the database container.
+> **Why this step is critical.** Your `docker-compose.prod.yml` and `docker-infra/docker-compose.yml` reference two external Docker networks. Docker will refuse to start **any** container if an external network it depends on does not already exist.
+> * `traefik_proxy` — the network your existing Traefik proxy uses to discover containers (must already exist)
+> * `jdconnect_net` — the internal network that groups your JD Connect app containers together (you create this once below)
+
+### 5.1 — Find Your Traefik Network Name
+
+Since Traefik is already running on your VPS, run these commands to discover its exact configuration:
+
+```bash
+# 1. Find the Traefik container name
+docker ps --filter "name=traefik" --format "table {{.Names}}\t{{.Status}}"
+
+# 2. List every network Traefik is currently connected to
+docker inspect $(docker ps --filter "name=traefik" --format "{{.Names}}" | head -1) \
+  --format '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{"\n"}}{{end}}'
+
+# 3. Find the certresolver name configured in Traefik
+#    (you will need this when filling in the Traefik labels in the compose files)
+docker inspect $(docker ps --filter "name=traefik" --format "{{.Names}}" | head -1) \
+  --format '{{join .Config.Cmd "\n"}}' | grep -i "certresolver\|acme"
+```
+
+**Note down the following from the output above:**
+| What | Where to look | Your VPS value |
+|---|---|---|
+| **Traefik network name** | Output of command 2 | ✅ `root_default` |
+| **Certresolver name** | Output of command 3 (after `certresolver.`) | ✅ `mytlschallenge` |
+| **Challenge type** | Output of command 3 (`httpchallenge` or `tlschallenge`) | ✅ HTTP-01 (port 80) |
+
+> **Your files are already configured with these values.** The `docker-compose.prod.yml` and `docker-infra/docker-compose.yml` already use `root_default` and `mytlschallenge`. No manual changes needed.
+
+### 5.2 — Create the JD Connect App Network
+
+```bash
+docker network create jdconnect_net
+```
+
+*(This is a one-time command. The `root_default` Traefik network already exists — never recreate that one. Only `jdconnect_net` needs to be created manually.)*
+
+---
+
+## Step 6: Configure GitHub Secrets & Push Code
+
+To enable automatic deployments, we need to save your keys and VPS credentials as secrets in your GitHub repository.
+
+1. Go to your repository on **GitHub** → **Settings** → **Secrets and variables** → **Actions** → **New repository secret** and add these secrets:
+
+| Secret Name | Value Description | Example Value |
+|---|---|---|
+| `VPS_HOST` | Your VPS IP Address | `103.163.224.78` |
+| `VPS_USER` | Server username | `root` |
+| `VPS_SSH_KEY` | Content of your private SSH key from Windows PC | Run `Get-Content ~\.ssh\id_ed25519` in PowerShell and copy all lines. |
+| `GHCR_TOKEN` | A GitHub Personal Access Token (PAT) with `write:packages` and `repo` scope | Generated from GitHub Developer settings. |
+| `PROD_SUPABASE_URL` | Your production Supabase URL (pointing to your domain) | `https://supabase.yourdomain.com` |
+| `PROD_SUPABASE_ANON_KEY` | Your production anon API key | `eyJhbGciOiJIUzI1Ni...` |
+| `PROD_SUPABASE_SERVICE_ROLE_KEY` | Your production service_role API key | `eyJhbGciOiJIUzI1Ni...` |
+
+### How to Generate your `GHCR_TOKEN` (GitHub Personal Access Token)
+1. In your **GitHub account**, go to **Settings** → **Developer settings**.
+2. Click **Personal Access Tokens** → **Tokens (classic)**.
+3. Click **Generate new token (classic)**.
+4. Give it a name (Note: `JD-Connect-VPS-Access`), set the expiration (e.g. `No expiration`), and select the scopes:
+   * `[x] repo` (so the VPS can download your code configs)
+   * `[x] write:packages` (so GitHub can push/pull container packages)
+5. Click **Generate token** and copy the code immediately (starts with `ghp_...`).
+
+### Trigger the First Deploy
+Open a local PowerShell terminal on your Windows machine, commit the config changes, and push to GitHub:
+```powershell
+git add .
+git commit -m "deploy: add Docker configurations and deploy pipeline"
+git push origin main
+```
+*This starts the GitHub Actions job. Wait 2-3 minutes for the pipeline to finish. Once complete, it will have cloned the project into `/opt/jd-connect` on the VPS and set up the app container!*
+
+---
+
+## Step 7: Start your Supabase Database Stack
+
+Now that the deployment pipeline has cloned the codebase to the VPS at `/opt/jd-connect/`:
+
+1. In your **VPS SSH terminal**, navigate to the Supabase directory:
+   ```bash
+   cd /opt/jd-connect/docker-infra
+   ```
+2. Create and edit your production environment secrets file:
+   ```bash
+   nano .env
+   ```
+   *Paste your generated production secrets and credentials (Postgres password, JWT secrets, SMTP email credentials, etc.). Press `Ctrl+O` then `Enter` to save, and `Ctrl+X` to exit.*
+
+   > **Important:** Set `SUPABASE_PUBLIC_URL` to your real domain (`https://supabase.yourdomain.com`), not `localhost`. The Storage service uses this to construct public file URLs. If you don't have a domain yet, use `http://<YOUR_VPS_IP>:19000` temporarily.
+
+3. Spin up the Supabase backend containers:
+   ```bash
+   docker compose up -d
+   ```
+4. Verify everything is running:
+   ```bash
+   docker compose ps
+   ```
+
+---
+
+## Step 8: Upload and Restore Database Backup
+
+Now we copy your database backup to the VPS and restore it.
 
 1. Open a **new PowerShell window** on your Windows PC (do not use the SSH window).
 2. Run the `scp` command to upload the backup file to the VPS (replace `<YOUR_VPS_IP>` with your VPS IP):
    ```powershell
    scp "c:\Users\Administrator\Desktop\JD Connect\jd-connect-backup\jd-connect-core_260706.backup" root@<YOUR_VPS_IP>:/tmp/restore.backup
    ```
-3. Once the upload completes, switch back to your **SSH terminal window**.
-4. Check that the file arrived in `/tmp/`:
-   ```bash
-   ls -la /tmp/restore.backup
-   ```
-5. Once your Supabase Docker containers are started on the VPS, copy the backup file into the running Postgres container:
+3. Switch back to your **VPS SSH terminal window**.
+4. Copy the backup file into the running database container:
    ```bash
    docker cp /tmp/restore.backup supabase-db:/tmp/restore.backup
    ```
-6. Run the restore utility:
+5. Run the restore utility:
    ```bash
    docker exec -it supabase-db pg_restore \
      --host=localhost \
@@ -127,53 +239,109 @@ We will copy the backup file from your Windows desktop to the VPS, then restore 
      --verbose \
      /tmp/restore.backup
    ```
-7. Verify the restore succeeded:
+6. Verify the restore succeeded:
    ```bash
    docker exec -it supabase-db psql -U postgres -d postgres -c "\dt public.*"
    ```
 
 ---
 
-## Step 7: Configure GitHub Actions Secrets
+## Phase 3: DNS Cutover & Traefik SSL
 
-To enable automatic deployment, go to your repository on **GitHub** -> **Settings** -> **Secrets and variables** -> **Actions** -> **New repository secret** and add these values:
+This phase points your real domain name at the VPS and activates HTTPS via your existing Traefik. Complete Phases 1 (local Docker testing) and 2 (VPS deploy via CI/CD) before this step.
 
-| Secret Name | Value Description | Example Value |
+### What DNS Records You Need
+
+You need **3 A records** in your domain's DNS, all pointing to the same VPS IP:
+
+| Subdomain | Points To | Purpose |
 |---|---|---|
-| `VPS_HOST` | Your VPS IP Address | `103.163.224.78` |
-| `VPS_USER` | Server username | `root` |
-| `VPS_SSH_KEY` | Content of your private SSH key from Windows PC | Run `Get-Content ~\.ssh\id_ed25519` in PowerShell and copy all lines. |
-| `GHCR_TOKEN` | A GitHub Personal Access Token (PAT) with `write:packages` scope | Generated from GitHub Settings -> Developer settings. |
-| `PROD_SUPABASE_URL` | Your production Supabase URL (pointing to your domain) | `https://supabase.yourdomain.com` |
-| `PROD_SUPABASE_ANON_KEY` | Your production anon API key | `eyJhbGciOiJIUzI1Ni...` |
-| `PROD_SUPABASE_SERVICE_ROLE_KEY` | Your production service_role API key | `eyJhbGciOiJIUzI1Ni...` |
+| `jdconnect.yourdomain.com` | VPS IP | The main JD Connect app |
+| `supabase.yourdomain.com` | VPS IP | Supabase API (Kong gateway) |
+| `studio.yourdomain.com` | VPS IP | Supabase Studio admin dashboard |
 
-### How to Generate your `GHCR_TOKEN` (GitHub Personal Access Token)
+### Add DNS Records in Hostinger
 
-1. Log into your **GitHub account**.
-2. Click on your profile picture in the top-right corner and click **Settings**.
-3. Scroll to the bottom of the left sidebar and click **Developer settings**.
-4. In the left sidebar, expand **Personal Access Tokens** and click on **Tokens (classic)**.
-5. Click the **Generate new token** button in the top-right and choose **Generate new token (classic)**.
-6. Fill in the fields:
-   * **Note:** `JD-Connect-VPS-Access`
-   * **Expiration:** Select **No expiration** (or a duration of your choice).
-   * **Scopes (Permissions):** Check the boxes for:
-     * `[x] repo` (grants access to pull your private repository code onto the VPS)
-     * `[x] write:packages` (grants access to upload and download your Docker containers)
-7. Scroll to the bottom and click **Generate token**.
-8. **Copy the token immediately** (it starts with `ghp_...`). You will not be able to see it again once you close the page.
+1. Log into Hostinger hPanel
+2. Go to **Domains** → your domain → **DNS / Nameservers**
+3. Add these three A records (replace `YOUR_VPS_IP`):
+
+```
+Type: A    Name: jdconnect    Value: YOUR_VPS_IP    TTL: 300
+Type: A    Name: supabase     Value: YOUR_VPS_IP    TTL: 300
+Type: A    Name: studio       Value: YOUR_VPS_IP    TTL: 300
+```
+
+*Set TTL to `300` (5 minutes) while testing. Raise it to `3600` after everything is confirmed working.*
+
+### Update Domain Placeholders in Config Files
+
+Before DNS propagates, replace `yourdomain.com` with your real domain in:
+
+- **`docker-compose.prod.yml`** — the `traefik.http.routers.jdconnect.rule` label
+- **`docker-infra/docker-compose.yml`** — the Traefik labels on the `kong` and `studio` services
+
+Then commit and push (triggers app redeploy), and restart the Supabase stack:
+```bash
+cd /opt/jd-connect/docker-infra
+docker compose down && docker compose up -d
+```
+
+### Verify DNS Propagation
+
+Run from your Windows PC or the VPS — repeat until you see your VPS IP in the answer:
+
+```powershell
+# Windows PowerShell
+nslookup jdconnect.yourdomain.com
+nslookup supabase.yourdomain.com
+nslookup studio.yourdomain.com
+```
+
+### Verify Traefik Is Issuing SSL Certs
+
+After DNS propagates (all three `nslookup` commands return your VPS IP), Traefik will automatically request Let's Encrypt certificates the first time each domain receives an HTTPS request. Run on the VPS to confirm:
+
+```bash
+# Check Traefik logs for certificate activity (your Traefik container is root-traefik-1)
+docker logs root-traefik-1 2>&1 | grep -i "certificate\|acme\|yourdomain"
+
+# Verify HTTPS is responding correctly
+curl -I https://jdconnect.yourdomain.com
+curl -I https://supabase.yourdomain.com
+```
+
+### Update Supabase `.env` With Real Domain URLs
+
+SSH into your VPS and edit `/opt/jd-connect/docker-infra/.env` — confirm or update these four values:
+
+```env
+SITE_URL=https://jdconnect.yourdomain.com
+ADDITIONAL_REDIRECT_URLS=https://jdconnect.yourdomain.com/**
+API_EXTERNAL_URL=https://supabase.yourdomain.com
+SUPABASE_PUBLIC_URL=https://supabase.yourdomain.com
+```
+
+Restart the Supabase stack to apply the changes:
+```bash
+cd /opt/jd-connect/docker-infra
+docker compose down && docker compose up -d
+```
+
+### Update GitHub Secrets
+
+Update `PROD_SUPABASE_URL` in your GitHub secrets to your real domain (`https://supabase.yourdomain.com`) instead of the IP-based URL, then trigger a redeploy by pushing any commit.
 
 ---
 
 ## Frequently Asked Questions (FAQ)
 
 ### 1. Why do we need the `GHCR_TOKEN` secret in GitHub?
-Although GitHub Actions has a built-in temporary token (`GITHUB_TOKEN`), this token is deleted the second your deployment job finishes. 
+Although GitHub Actions has a built-in temporary token (`GITHUB_TOKEN`), this token is deleted the second your deployment job finishes.
 Your VPS (Hostinger) needs to pull private images from GitHub Container Registry. If you ever SSH into your VPS and want to pull the latest image or restart containers manually, your VPS needs a permanent password. The Personal Access Token (`GHCR_TOKEN`) acts as this permanent password.
 
 ### 2. What exactly is the `PROD_SUPABASE_URL`?
-This is the URL where your application contacts the Supabase API. 
+This is the URL where your application contacts the Supabase API.
 * **If you have pointed your domain name to the VPS:** It will be your domain (e.g., `https://supabase.yourdomain.com`).
 * **If you are testing on your VPS without a domain name yet:** It will be your VPS IP address and Kong port (e.g., `http://<YOUR_VPS_IP>:19000`).
 
@@ -192,5 +360,3 @@ This is the URL where your application contacts the Supabase API.
 * **Cleaning up old images:**
   1. **On GitHub:** You can configure a periodic workflow or use the GitHub Packages UI to delete older, untagged images.
   2. **On the VPS:** Docker keeps older images on your disk when new ones are pulled, which can fill up your VPS hard drive. You can clear them from your VPS by running a prune command periodically (e.g. `docker image prune -a -f`).
-
-
