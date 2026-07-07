@@ -12,8 +12,6 @@ services:
     image: ghcr.io/kashishkami/jd-connect:${IMAGE_TAG:-latest}
     container_name: jdconnect-app
     restart: unless-stopped
-    ports:
-      - "19003:19003"
     networks:
       - jdconnect_net
       - root_default
@@ -26,8 +24,8 @@ services:
       SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY}
     labels:
       - "traefik.enable=true"
-      # Replace jdconnect.yourdomain.com with your actual domain when pointing DNS
-      - "traefik.http.routers.jdconnect.rule=Host(`jdconnect.yourdomain.com`)"
+      # Configure Traefik host routing for jdconnect.in (Option B)
+      - "traefik.http.routers.jdconnect.rule=Host(`jdconnect.in`)"
       - "traefik.http.routers.jdconnect.entrypoints=websecure"
       - "traefik.http.routers.jdconnect.tls.certresolver=mytlschallenge"
       - "traefik.http.services.jdconnect.loadbalancer.server.port=19003"

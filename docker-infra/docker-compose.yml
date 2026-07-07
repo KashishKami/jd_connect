@@ -66,8 +66,8 @@ services:
       - root_default
     labels:
       - "traefik.enable=true"
-      # Replace studio.yourdomain.com with your actual domain
-      - "traefik.http.routers.supabase-studio.rule=Host(`studio.yourdomain.com`)"
+      # Configure Traefik host routing for Option B
+      - "traefik.http.routers.supabase-studio.rule=Host(`studio.jdconnect.in`)"
       - "traefik.http.routers.supabase-studio.entrypoints=websecure"
       - "traefik.http.routers.supabase-studio.tls.certresolver=mytlschallenge"
       # Internal port Studio listens on inside the container
@@ -129,8 +129,8 @@ services:
     entrypoint: ["/bin/sh", "/home/kong/kong-entrypoint.sh"]
     labels:
       - "traefik.enable=true"
-      # Replace supabase.yourdomain.com with your actual domain
-      - "traefik.http.routers.supabase-api.rule=Host(`supabase.yourdomain.com`)"
+      # Configure Traefik host routing for Option B
+      - "traefik.http.routers.supabase-api.rule=Host(`supabase.jdconnect.in`)"
       - "traefik.http.routers.supabase-api.entrypoints=websecure"
       - "traefik.http.routers.supabase-api.tls.certresolver=mytlschallenge"
       # Kong's internal HTTP port (Traefik handles TLS — Kong receives plain HTTP inside the network)
