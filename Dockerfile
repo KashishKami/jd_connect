@@ -20,6 +20,9 @@ ARG VITE_SUPABASE_PUBLISHABLE_KEY
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
 ENV VITE_SUPABASE_PUBLISHABLE_KEY=$VITE_SUPABASE_PUBLISHABLE_KEY
 
+# Force Nitro to build for Node.js (not Cloudflare, which is the default in @lovable.dev/vite-tanstack-config)
+ENV NITRO_PRESET=node
+
 # Build the TanStack Start application (compiles SSR code via Nitro)
 RUN bun run build
 
