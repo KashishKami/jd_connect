@@ -42,6 +42,18 @@ Your VPS already runs a **Traefik** reverse proxy that handles all incoming HTTP
 * Automatically issues a free Let's Encrypt SSL certificate
 * Forwards HTTPS traffic from port 443 to the container's internal port `19003` — through the Docker network, not a public host port
 
+### 4. The Two Distinct Environment Files
+It is critical to distinguish between the two separate `.env` files in this project:
+
+*   **Database Infrastructure Env File (`docker-infra/.env`)**:
+    *   **Location on VPS:** `/opt/jd-connect/docker-infra/.env`
+    *   **Management:** **Manual (Configured once).** You will create and configure this file directly on the VPS via SSH in Step 7.
+    *   **Contents:** Postgres passwords, JWT secret keys, auth URL configuration, and SMTP credentials.
+*   **Frontend App Service Env File (Root `.env`)**:
+    *   **Location on VPS:** `/opt/jd-connect/.env`
+    *   **Management:** **Automatic (Managed by CI/CD).** You should **never** manually create or edit this file on the VPS. The GitHub Actions pipeline generates and overwrites it during every deployment using your GitHub Repository Secrets.
+    *   **Contents:** Server-side connection URL to Supabase and API access keys.
+
 ---
 
 ## Step 1: Generate SSH Keys on Windows
@@ -198,18 +210,48 @@ Now that the deployment pipeline has cloned the codebase to the VPS at `/opt/jd-
    ```bash
    nano .env
    ```
-   *Paste your generated production secrets and credentials (Postgres password, JWT secrets, SMTP email credentials, etc.). Press `Ctrl+O` then `Enter` to save, and `Ctrl+X` to exit.*
+3. Generate your secrets by copying the long `node -e "..."` command from the comments at the top of your `docker-infra/.env.example` file and running it. Paste the output keys into this `.env` file.
+4. **Configure your URLs:** Inside this `.env` file, change the default `localhost` addresses to match your VPS IP. You will find these variables at lines 53 and 69–71:
 
-   > **Important:** Set `SUPABASE_PUBLIC_URL` to your real domain (`https://supabase.yourdomain.com`), not `localhost`. The Storage service uses this to construct public file URLs. If you don't have a domain yet, use `http://<YOUR_VPS_IP>:19000` temporarily.
+   **If testing via IP temporarily (before pointing domains):**
+   ```env
+   SUPABASE_PUBLIC_URL=http://<YOUR_VPS_IP>:19000
+   SITE_URL=http://<YOUR_VPS_IP>:19003
+   ADDITIONAL_REDIRECT_URLS=http://<YOUR_VPS_IP>:19003/**
+   API_EXTERNAL_URL=http://<YOUR_VPS_IP>:19000
+   ```
 
-3. Spin up the Supabase backend containers:
+   **If pointing your domain directly now (highly recommended):**
+   ```env
+   SUPABASE_PUBLIC_URL=https://supabase.yourdomain.com
+   SITE_URL=https://jdconnect.yourdomain.com
+   ADDITIONAL_REDIRECT_URLS=https://jdconnect.yourdomain.com/**
+   API_EXTERNAL_URL=https://supabase.yourdomain.com
+   ```
+
+   *Save the file by pressing `Ctrl+O` then `Enter`, and exit with `Ctrl+X`.*
+
+5. Spin up the Supabase backend containers:
    ```bash
    docker compose up -d
    ```
-4. Verify everything is running:
+6. Verify everything is running:
    ```bash
    docker compose ps
    ```
+
+### ⚠️ IMPORTANT: Write Keys back to GitHub Secrets
+Now that you have initialized the Supabase `.env` file on your VPS, you have generated your production JWT keys. You must copy these keys back into your **GitHub Repository Secrets** so that the frontend app container can communicate with Supabase.
+
+Open GitHub, go to **Settings** → **Secrets and variables** → **Actions**, and update or add the following secrets:
+
+1. **`PROD_SUPABASE_ANON_KEY`**: Paste the value of `ANON_KEY` from your newly created `/opt/jd-connect/docker-infra/.env` file.
+2. **`PROD_SUPABASE_SERVICE_ROLE_KEY`**: Paste the value of `SERVICE_ROLE_KEY` from your `/opt/jd-connect/docker-infra/.env` file.
+3. **`PROD_SUPABASE_URL`**: Set this to:
+   * `http://<YOUR_VPS_IP>:19000` (if testing via IP) OR
+   * `https://supabase.yourdomain.com` (if using your domain)
+
+*(Once you save these secrets, push any minor git commit to trigger a redeploy. The frontend container will rebuild and connect to the newly created Supabase database automatically!)*
 
 ---
 
