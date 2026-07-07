@@ -338,9 +338,18 @@ Type: A    Name: studio       Value: YOUR_VPS_IP    TTL: 300
 
 ---
 
-### Update Domain Placeholders in Config Files
+### Update GitHub Secrets
 
-Before DNS propagates, replace the placeholder domains with your real domains in these locations:
+Before pushing your domain config changes, update **`PROD_SUPABASE_URL`** in your GitHub Secrets to point to your new secure domain. This ensures that the build process uses the correct URL.
+
+*   **Option A:** Set `PROD_SUPABASE_URL` to `https://supabase.yourdomain.com`
+*   **Option B:** Set `PROD_SUPABASE_URL` to `https://supabase.jdconnect.in`
+
+---
+
+### Update Domain Placeholders in Config Files & Push Code
+
+Now replace the placeholder domains with your real domains in your local files:
 
 #### 1. In `docker-compose.prod.yml`
 Update the Traefik host routing rule:
@@ -356,7 +365,14 @@ Update the Traefik host routing rules for both `studio` and `kong`:
     *   Studio: `Host(\`studio.jdconnect.in\` )`
     *   Kong: `Host(\`supabase.jdconnect.in\` )`
 
-Then commit and push (triggers app redeploy), and restart the Supabase stack on the VPS:
+Once updated, commit and push your code. This will trigger the GitHub Actions workflow, building a new Docker image containing your new domain URL and deploying it to the VPS:
+```powershell
+git add .
+git commit -m "chore: apply production domains"
+git push origin main
+```
+
+Additionally, restart the Supabase stack on the VPS to load the new domain labels:
 ```bash
 cd /opt/jd-connect/docker-infra
 docker compose down && docker compose up -d
@@ -426,12 +442,6 @@ docker compose down && docker compose up -d
 ```
 
 ---
-
-### Update GitHub Secrets
-
-Update `PROD_SUPABASE_URL` in your GitHub secrets to your real domain instead of the IP-based URL, then trigger a redeploy by pushing any commit.
-*   **Option A:** `https://supabase.yourdomain.com`
-*   **Option B:** `https://supabase.jdconnect.in`
 
 ---
 
