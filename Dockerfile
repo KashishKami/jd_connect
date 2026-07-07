@@ -1,5 +1,5 @@
 # ── Stage 1: Build ──────────────────────────────────────────────────────────
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 # Install Bun globally
 RUN npm install -g bun
@@ -20,19 +20,24 @@ ARG VITE_SUPABASE_PUBLISHABLE_KEY
 ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
 ENV VITE_SUPABASE_PUBLISHABLE_KEY=$VITE_SUPABASE_PUBLISHABLE_KEY
 
-# Force Nitro to build for Node.js (not Cloudflare, which is the default in @lovable.dev/vite-tanstack-config)
-ENV NITRO_PRESET=node
-
-# Build the TanStack Start application (compiles SSR code via Nitro)
+# Build the TanStack Start application
 RUN bun run build
 
 # ── Stage 2: Runtime ─────────────────────────────────────────────────────────
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 
 WORKDIR /app
 
-# Copy only the compiled output directory from the builder stage
-COPY --from=builder /app/.output ./
+# Copy node_modules from the builder — the server bundle has external dependencies
+# (React, TanStack, etc.) that are NOT bundled and must be present at runtime.
+# Both stages use the same base image (node:20-alpine/linux) so the binaries are compatible.
+COPY --from=builder /app/node_modules ./node_modules
+
+# Copy the compiled app from the builder stage
+COPY --from=builder /app/dist ./
+
+# Copy the Node.js HTTP adapter that wraps the Cloudflare Workers-style handler
+COPY server-node.mjs ./server-node.mjs
 
 # Set runtime environment variables
 ENV NODE_ENV=production
@@ -40,5 +45,5 @@ ENV PORT=19003
 
 EXPOSE 19003
 
-# Run the Nitro server entrypoint
-CMD ["node", "server/index.mjs"]
+# Run the Node.js HTTP adapter (wraps the CF Workers handler in a real HTTP server)
+CMD ["node", "server-node.mjs"]
