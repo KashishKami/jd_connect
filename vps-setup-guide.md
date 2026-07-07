@@ -294,7 +294,10 @@ This phase points your real domain name at the VPS and activates HTTPS via your 
 
 ### What DNS Records You Need
 
-You need **3 A records** in your domain's DNS, all pointing to the same VPS IP:
+Choose **one** of the options below depending on your domain structure:
+
+#### Option A: Subdomain Setup (e.g., jdconnect.yourdomain.com)
+Use this if you are deploying to a subdomain of an existing website.
 
 | Subdomain | Points To | Purpose |
 |---|---|---|
@@ -302,66 +305,118 @@ You need **3 A records** in your domain's DNS, all pointing to the same VPS IP:
 | `supabase.yourdomain.com` | VPS IP | Supabase API (Kong gateway) |
 | `studio.yourdomain.com` | VPS IP | Supabase Studio admin dashboard |
 
+#### Option B: Apex / Root Domain Setup (e.g., jdconnect.in)
+Use this if you bought a brand new domain specifically for this application.
+
+| Domain/Subdomain | Points To | Purpose |
+|---|---|---|
+| `jdconnect.in` (Root / `@`) | VPS IP | The main JD Connect app |
+| `supabase.jdconnect.in` | VPS IP | Supabase API (Kong gateway) |
+| `studio.jdconnect.in` | VPS IP | Supabase Studio admin dashboard |
+
+---
+
 ### Add DNS Records in Hostinger
 
-1. Log into Hostinger hPanel
-2. Go to **Domains** → your domain → **DNS / Nameservers**
-3. Add these three A records (replace `YOUR_VPS_IP`):
+Log into Hostinger hPanel, go to **Domains** → your domain → **DNS / Nameservers**, and add your A records:
 
+**For Option A:**
 ```
 Type: A    Name: jdconnect    Value: YOUR_VPS_IP    TTL: 300
 Type: A    Name: supabase     Value: YOUR_VPS_IP    TTL: 300
 Type: A    Name: studio       Value: YOUR_VPS_IP    TTL: 300
 ```
 
+**For Option B (`jdconnect.in`):**
+```
+Type: A    Name: @            Value: YOUR_VPS_IP    TTL: 300
+Type: A    Name: supabase     Value: YOUR_VPS_IP    TTL: 300
+Type: A    Name: studio       Value: YOUR_VPS_IP    TTL: 300
+```
+
 *Set TTL to `300` (5 minutes) while testing. Raise it to `3600` after everything is confirmed working.*
+
+---
 
 ### Update Domain Placeholders in Config Files
 
-Before DNS propagates, replace `yourdomain.com` with your real domain in:
+Before DNS propagates, replace the placeholder domains with your real domains in these locations:
 
-- **`docker-compose.prod.yml`** — the `traefik.http.routers.jdconnect.rule` label
-- **`docker-infra/docker-compose.yml`** — the Traefik labels on the `kong` and `studio` services
+#### 1. In `docker-compose.prod.yml`
+Update the Traefik host routing rule:
+*   **Option A:** `Host(\`jdconnect.yourdomain.com\` )`
+*   **Option B:** `Host(\`jdconnect.in\` )`
 
-Then commit and push (triggers app redeploy), and restart the Supabase stack:
+#### 2. In `docker-infra/docker-compose.yml`
+Update the Traefik host routing rules for both `studio` and `kong`:
+*   **Option A:**
+    *   Studio: `Host(\`studio.yourdomain.com\` )`
+    *   Kong: `Host(\`supabase.yourdomain.com\` )`
+*   **Option B:**
+    *   Studio: `Host(\`studio.jdconnect.in\` )`
+    *   Kong: `Host(\`supabase.jdconnect.in\` )`
+
+Then commit and push (triggers app redeploy), and restart the Supabase stack on the VPS:
 ```bash
 cd /opt/jd-connect/docker-infra
 docker compose down && docker compose up -d
 ```
 
+---
+
 ### Verify DNS Propagation
 
 Run from your Windows PC or the VPS — repeat until you see your VPS IP in the answer:
 
+**For Option A:**
 ```powershell
-# Windows PowerShell
 nslookup jdconnect.yourdomain.com
 nslookup supabase.yourdomain.com
 nslookup studio.yourdomain.com
 ```
 
+**For Option B:**
+```powershell
+nslookup jdconnect.in
+nslookup supabase.jdconnect.in
+nslookup studio.jdconnect.in
+```
+
+---
+
 ### Verify Traefik Is Issuing SSL Certs
 
-After DNS propagates (all three `nslookup` commands return your VPS IP), Traefik will automatically request Let's Encrypt certificates the first time each domain receives an HTTPS request. Run on the VPS to confirm:
+After DNS propagates, Traefik will automatically request Let's Encrypt certificates the first time each domain receives an HTTPS request. Run on the VPS to confirm:
 
 ```bash
 # Check Traefik logs for certificate activity (your Traefik container is root-traefik-1)
-docker logs root-traefik-1 2>&1 | grep -i "certificate\|acme\|yourdomain"
+docker logs root-traefik-1 2>&1 | grep -i "certificate\|acme\|jdconnect"
 
-# Verify HTTPS is responding correctly
-curl -I https://jdconnect.yourdomain.com
-curl -I https://supabase.yourdomain.com
+# Verify HTTPS is responding correctly (Option B example)
+curl -I https://jdconnect.in
+curl -I https://supabase.jdconnect.in
 ```
+
+---
 
 ### Update Supabase `.env` With Real Domain URLs
 
 SSH into your VPS and edit `/opt/jd-connect/docker-infra/.env` — confirm or update these four values:
 
+**For Option A:**
 ```env
 SITE_URL=https://jdconnect.yourdomain.com
 ADDITIONAL_REDIRECT_URLS=https://jdconnect.yourdomain.com/**
 API_EXTERNAL_URL=https://supabase.yourdomain.com
 SUPABASE_PUBLIC_URL=https://supabase.yourdomain.com
+```
+
+**For Option B (`jdconnect.in`):**
+```env
+SITE_URL=https://jdconnect.in
+ADDITIONAL_REDIRECT_URLS=https://jdconnect.in/**
+API_EXTERNAL_URL=https://supabase.jdconnect.in
+SUPABASE_PUBLIC_URL=https://supabase.jdconnect.in
 ```
 
 Restart the Supabase stack to apply the changes:
@@ -370,9 +425,13 @@ cd /opt/jd-connect/docker-infra
 docker compose down && docker compose up -d
 ```
 
+---
+
 ### Update GitHub Secrets
 
-Update `PROD_SUPABASE_URL` in your GitHub secrets to your real domain (`https://supabase.yourdomain.com`) instead of the IP-based URL, then trigger a redeploy by pushing any commit.
+Update `PROD_SUPABASE_URL` in your GitHub secrets to your real domain instead of the IP-based URL, then trigger a redeploy by pushing any commit.
+*   **Option A:** `https://supabase.yourdomain.com`
+*   **Option B:** `https://supabase.jdconnect.in`
 
 ---
 
