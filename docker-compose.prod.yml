@@ -12,6 +12,8 @@ services:
     image: ghcr.io/kashishkami/jd-connect:${IMAGE_TAG:-latest}
     container_name: jdconnect-app
     restart: unless-stopped
+    ports:
+      - "19003:19003"
     networks:
       - jdconnect_net
       - root_default
