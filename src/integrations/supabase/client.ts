@@ -2,6 +2,16 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
+// Browser fallback for crypto.randomUUID in non-secure (HTTP) contexts
+if (typeof window !== 'undefined' && typeof window.crypto !== 'undefined' && !window.crypto.randomUUID) {
+  // @ts-ignore
+  window.crypto.randomUUID = function () {
+    return '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, (c) =>
+      (Number(c) ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (Number(c) / 4)))).toString(16)
+    );
+  };
+}
+
 function createSupabaseClient() {
   // Use import.meta.env for client-side (Vite build-time replacement)
   // Fall back to process.env for SSR (server-side rendering)

@@ -71,6 +71,7 @@ jobs:
             # Write runtime environment variables
             echo "SUPABASE_URL=${{ secrets.PROD_SUPABASE_URL }}" > .env
             echo "SUPABASE_SERVICE_ROLE_KEY=${{ secrets.PROD_SUPABASE_SERVICE_ROLE_KEY }}" >> .env
+            echo "SUPABASE_PUBLISHABLE_KEY=${{ secrets.PROD_SUPABASE_ANON_KEY }}" >> .env
             echo "IMAGE_TAG=latest" >> .env
             
             # Pull the latest image and restart the container
