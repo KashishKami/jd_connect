@@ -22,11 +22,19 @@ services:
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY}
+    extra_hosts:
+      # Resolve Supabase subdomains to the Docker host IP so SSR works without
+      # DNS hairpin (container → external IP → same VPS). Use host-gateway which
+      # Docker resolves to the host's docker0 bridge IP automatically.
+      - "supabase.jdconnect.in:host-gateway"
+      - "studio.jdconnect.in:host-gateway"
     labels:
       - "traefik.enable=true"
-      # Configure Traefik host routing for jdconnect.in (Option B)
-      - "traefik.http.routers.jdconnect.rule=Host(`jdconnect.in`)"
+      # Handle both apex and www — cert resolver will issue a SAN cert for both
+      - "traefik.http.routers.jdconnect.rule=Host(`jdconnect.in`) || Host(`www.jdconnect.in`)"
       - "traefik.http.routers.jdconnect.entrypoints=websecure"
       - "traefik.http.routers.jdconnect.tls.certresolver=mytlschallenge"
+      - "traefik.http.routers.jdconnect.tls.domains[0].main=jdconnect.in"
+      - "traefik.http.routers.jdconnect.tls.domains[0].sans=www.jdconnect.in"
       - "traefik.http.services.jdconnect.loadbalancer.server.port=19003"
       - "traefik.docker.network=root_default"
