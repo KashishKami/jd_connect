@@ -89,13 +89,19 @@ docker build -t jd-connect-local . `
 
 ### Step 2 — Run the Container
 
-Replace `YOUR_SERVICE_ROLE_KEY` with the `SERVICE_ROLE_KEY` value from `docker-infra/.env`.
+Replace `YOUR_SERVICE_ROLE_KEY` and `YOUR_ANON_KEY` with the matching values from `docker-infra/.env`.
+
+> ⚠️ **Important:** `SUPABASE_PUBLISHABLE_KEY` (no `VITE_` prefix) **must** be passed at runtime.
+> The `VITE_` prefixed key is baked into the client bundle at build time, but the server-side
+> middleware reads `process.env.SUPABASE_PUBLISHABLE_KEY` at runtime. Omitting it causes
+> "Unauthorized" errors on every server function (password reset, delete, AI, etc.).
 
 ```powershell
 docker run -d --name jdc-test -p 19003:19003 `
   -e NODE_ENV=production `
   -e PORT=19003 `
   -e SUPABASE_URL=http://host.docker.internal:19000 `
+  -e SUPABASE_PUBLISHABLE_KEY=YOUR_ANON_KEY `
   -e SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVICE_ROLE_KEY `
   jd-connect-local
 ```
@@ -110,6 +116,7 @@ docker run -d --name jdc-test -p 19003:19003 `
 | `-e NODE_ENV=production` | Enable production mode in Node.js |
 | `-e PORT=19003` | Tell the server which port to listen on inside the container |
 | `-e SUPABASE_URL=...` | Server-side Supabase URL (uses `host.docker.internal` to reach your Windows Supabase) |
+| `-e SUPABASE_PUBLISHABLE_KEY=...` | Anon key — required by server-side auth middleware at runtime |
 | `-e SUPABASE_SERVICE_ROLE_KEY=...` | Privileged server-side Supabase key |
 | `jd-connect-local` | The name of the image to run (built in Step 1) |
 
