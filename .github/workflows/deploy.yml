@@ -52,7 +52,8 @@ jobs:
           script: |
             mkdir -p /opt/jd-connect
             cd /opt/jd-connect
-            
+
+
             # Sync repository code (for compose files)
             if [ -d ".git" ]; then
               git remote set-url origin https://${{ github.actor }}:${{ secrets.GHCR_TOKEN }}@github.com/${{ github.repository }}.git
@@ -61,20 +62,20 @@ jobs:
             else
               git clone https://${{ github.actor }}:${{ secrets.GHCR_TOKEN }}@github.com/${{ github.repository }}.git .
             fi
-            
+
             # Login to GHCR on the VPS
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            
+
             # Ensure the app network exists (idempotent — safe to run every deploy)
             docker network create jdconnect_net 2>/dev/null || true
-            
+
             # Write runtime environment variables
             echo "SUPABASE_URL=${{ secrets.PROD_SUPABASE_URL }}" > .env
             echo "SUPABASE_SERVICE_ROLE_KEY=${{ secrets.PROD_SUPABASE_SERVICE_ROLE_KEY }}" >> .env
             echo "SUPABASE_PUBLISHABLE_KEY=${{ secrets.PROD_SUPABASE_ANON_KEY }}" >> .env
             echo "IMAGE_TAG=latest" >> .env
-            
-            # Pull the latest image and restart the container
+
+            # Pull the latest image and restart the app container
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml up -d --remove-orphans
 

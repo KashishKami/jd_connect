@@ -73,9 +73,7 @@ services:
       # Internal port Studio listens on inside the container
       - "traefik.http.services.supabase-studio.loadbalancer.server.port=3000"
       - "traefik.docker.network=root_default"
-      # Restrict Studio access to your admin IP only (replace with your IP)
-      - "traefik.http.middlewares.studio-ipwhitelist.ipwhitelist.sourcerange=YOUR.ADMIN.IP.HERE/32"
-      - "traefik.http.routers.supabase-studio.middlewares=studio-ipwhitelist"
+      # Studio is protected by Supabase's own login — no extra IP whitelist needed
     volumes:
       - ./volumes/snippets:/app/snippets:z
       - ./volumes/functions:/app/edge-functions:ro,z
