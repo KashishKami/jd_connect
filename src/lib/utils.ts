@@ -43,3 +43,24 @@ export function formatDateTime(input: Date | string | null | undefined): string 
   if (isNaN(d.getTime())) return String(input);
   return `${formatDate(d)} ${d.toLocaleTimeString()}`;
 }
+
+/** Format a date for chat separators: "Today", "Yesterday", or "Monday, 15 Jun 2026" */
+export function formatChatDividerDate(dateInput: string | Date): string {
+  const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (isNaN(d.getTime())) return "";
+
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  const dDate = d.toDateString();
+  if (dDate === today.toDateString()) {
+    return "Today";
+  } else if (dDate === yesterday.toDateString()) {
+    return "Yesterday";
+  } else {
+    const options: Intl.DateTimeFormatOptions = { weekday: "long", day: "numeric", month: "short", year: "numeric" };
+    return d.toLocaleDateString([], options);
+  }
+}
+

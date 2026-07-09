@@ -1,6 +1,6 @@
-import { formatDate, formatDateTime, cn } from "@/lib/utils";
+import { formatDate, formatDateTime, cn, formatChatDividerDate } from "@/lib/utils";
 import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -415,6 +415,21 @@ function ChannelThread({ channelId, onBack, initialMessageId }: { channelId: str
   // Combined view: older pages prepended before the live window
   const messages = [...olderMessages, ...latestMessages];
 
+  // Group messages by day for sticky headers
+  const messageGroups = useMemo(() => {
+    const groups: { dateStr: string; messages: Msg[] }[] = [];
+    messages.forEach((m) => {
+      const dateStr = new Date(m.created_at).toDateString();
+      const lastGroup = groups[groups.length - 1];
+      if (lastGroup && lastGroup.dateStr === dateStr) {
+        lastGroup.messages.push(m);
+      } else {
+        groups.push({ dateStr, messages: [m] });
+      }
+    });
+    return groups;
+  }, [messages]);
+
   const isThreadLoading = isMembershipLoading || (membership === true && isMessagesLoading);
 
   // Load older messages using a created_at cursor
@@ -726,103 +741,43 @@ function ChannelThread({ channelId, onBack, initialMessageId }: { channelId: str
               </button>
             </div>
           )}
-          {messages.map((m) => {
-            const mine = m.sender_id === employee?.id;
-            const isEditing = editingId === m.id;
-            const isDeleted = m.body === "This message has been deleted.";
-            return (
-              <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
-                <div className="flex flex-col max-w-[75%]">
-                  {!mine && (
-                    <div className="text-[11px] text-muted-foreground mb-1 px-1 flex items-center gap-2">
-                      <span className="font-semibold text-foreground/80">{(senders as Record<string, string>)[m.sender_id] ?? "—"}</span>
-                      <span>{new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                    </div>
-                  )}
-                  {mine && (
-                    <div className="text-[11px] text-muted-foreground mb-1 px-1 flex items-center justify-end gap-2">
-                      {!isDeleted && m.edited_at && <span className="italic opacity-70">edited ·</span>}
-                      <span>{new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
-                    </div>
-                  )}
-
-                  {isDeleted ? (
-                    <div 
-                      id={`message-${m.id}`}
-                      className={`relative rounded-2xl py-2 px-3 text-sm shadow-sm border ${
-                        mine
-                          ? "bg-primary/85 text-primary-foreground/85 border-primary/10 rounded-tr-none"
-                          : "bg-card text-muted-foreground/70 border-border/50 rounded-tl-none"
-                      }`}
-                    >
-                      <div className="leading-relaxed italic select-none">This message has been deleted.</div>
-                      {(m.reply_count ?? 0) > 0 && (
-                        <button
-                          onClick={() => setThreadParentId(m.id)}
-                          className={`mt-1.5 inline-flex items-center gap-1.5 text-[11px] font-medium rounded-full px-2 py-0.5 transition-colors ${
-                            mine
-                              ? "text-primary-foreground/80 bg-primary-foreground/10 hover:bg-primary-foreground/20"
-                              : "text-primary hover:text-primary/80 bg-primary/8 hover:bg-primary/15 border border-primary/20"
-                          }`}
-                        >
-                          <MessageSquare className="h-3 w-3" />
-                          {m.reply_count} {m.reply_count === 1 ? "reply" : "replies"}
-                        </button>
+          {messageGroups.map((group) => (
+            <div key={group.dateStr} className="space-y-3 relative">
+              <div className="sticky top-0 z-10 flex items-center justify-center py-2 w-full">
+                <span className="mx-4 text-xs font-semibold text-muted-foreground bg-[#eef2f6]/90 dark:bg-[#0b0f17]/90 backdrop-blur-sm px-3 py-1 rounded-full shadow-sm border border-border/50 select-none">
+                  {formatChatDividerDate(group.dateStr)}
+                </span>
+              </div>
+              {group.messages.map((m) => {
+                const mine = m.sender_id === employee?.id;
+                const isEditing = editingId === m.id;
+                const isDeleted = m.body === "This message has been deleted.";
+                return (
+                  <div key={m.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+                    <div className="flex flex-col max-w-[75%]">
+                      {!mine && (
+                        <div className="text-[11px] text-muted-foreground mb-1 px-1 flex items-center gap-2">
+                          <span className="font-semibold text-foreground/80">{(senders as Record<string, string>)[m.sender_id] ?? "—"}</span>
+                          <span>{new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                        </div>
                       )}
-                    </div>
-                  ) : (
-                    <ContextMenu>
-                      <ContextMenuTrigger asChild>
+                      {mine && (
+                        <div className="text-[11px] text-muted-foreground mb-1 px-1 flex items-center justify-end gap-2">
+                          {!isDeleted && m.edited_at && <span className="italic opacity-70">edited ·</span>}
+                          <span>{new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                        </div>
+                      )}
+
+                      {isDeleted ? (
                         <div 
                           id={`message-${m.id}`}
                           className={`relative rounded-2xl py-2 px-3 text-sm shadow-sm border ${
                             mine
-                              ? "bg-primary text-primary-foreground border-primary/20 rounded-tr-none"
-                              : "bg-card text-card-foreground border-border/50 rounded-tl-none"
+                              ? "bg-primary/85 text-primary-foreground/85 border-primary/10 rounded-tr-none"
+                              : "bg-card text-muted-foreground/70 border-border/50 rounded-tl-none"
                           }`}
                         >
-                          {/* Message body — normal or edit mode */}
-                          {isEditing ? (
-                            <div className="space-y-1.5">
-                              <textarea
-                                className="w-full min-w-[200px] bg-primary-foreground/10 text-primary-foreground border border-primary-foreground/30 rounded-lg px-2 py-1.5 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary-foreground/50"
-                                rows={3}
-                                value={editBody}
-                                onChange={(e) => setEditBody(e.target.value)}
-                                autoFocus
-                                onKeyDown={(e) => {
-                                  if (e.key === "Escape") cancelEdit();
-                                  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") void saveEdit(m.id);
-                                }}
-                              />
-                              <div className="flex items-center gap-1.5 justify-end">
-                                <button
-                                  onClick={cancelEdit}
-                                  className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-primary-foreground/10 hover:bg-primary-foreground/20 text-primary-foreground/80 transition-colors"
-                                >
-                                  <X className="h-3 w-3" /> Cancel
-                                </button>
-                                <button
-                                  onClick={() => void saveEdit(m.id)}
-                                  disabled={!editBody.trim()}
-                                  className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-primary-foreground/20 hover:bg-primary-foreground/30 text-primary-foreground font-semibold disabled:opacity-40 transition-colors"
-                                >
-                                  <Check className="h-3 w-3" /> Save
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <>
-                              <div className="leading-relaxed break-words">{renderMessageBody(m.body, mine)}</div>
-                              {!mine && m.edited_at && (
-                                <div className="text-[10px] italic opacity-60 mt-0.5">edited</div>
-                              )}
-                            </>
-                          )}
-                          <AttachmentList attachments={(m.attachments ?? []) as ChatAttachment[]} allChatImages={allChatImages} />
-                          <MessageReactions messageId={m.id} />
-
-                          {/* Thread reply indicator */}
+                          <div className="leading-relaxed italic select-none">This message has been deleted.</div>
                           {(m.reply_count ?? 0) > 0 && (
                             <button
                               onClick={() => setThreadParentId(m.id)}
@@ -836,102 +791,171 @@ function ChannelThread({ channelId, onBack, initialMessageId }: { channelId: str
                               {m.reply_count} {m.reply_count === 1 ? "reply" : "replies"}
                             </button>
                           )}
-
-                          {m.is_pinned && (
-                            <div className={`absolute -bottom-1.5 ${mine ? "-left-1.5" : "-right-1.5"} bg-background border rounded-full p-0.5 shadow-sm`}>
-                              <Pin className="h-3 w-3 text-primary fill-primary" />
-                            </div>
-                          )}
                         </div>
-                      </ContextMenuTrigger>
-                      <ContextMenuContent className="w-52">
-                        {mine && !isEditing && (
-                          <>
+                      ) : (
+                        <ContextMenu>
+                          <ContextMenuTrigger asChild>
+                            <div 
+                              id={`message-${m.id}`}
+                              className={`relative rounded-2xl py-2 px-3 text-sm shadow-sm border ${
+                                mine
+                                  ? "bg-primary text-primary-foreground border-primary/20 rounded-tr-none"
+                                  : "bg-card text-card-foreground border-border/50 rounded-tl-none"
+                              }`}
+                            >
+                              {/* Message body — normal or edit mode */}
+                              {isEditing ? (
+                                <div className="space-y-1.5">
+                                  <textarea
+                                    className="w-full min-w-[200px] bg-primary-foreground/10 text-primary-foreground border border-primary-foreground/30 rounded-lg px-2 py-1.5 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-primary-foreground/50"
+                                    rows={3}
+                                    value={editBody}
+                                    onChange={(e) => setEditBody(e.target.value)}
+                                    autoFocus
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Escape") cancelEdit();
+                                      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") void saveEdit(m.id);
+                                    }}
+                                  />
+                                  <div className="flex items-center gap-1.5 justify-end">
+                                    <button
+                                      onClick={cancelEdit}
+                                      className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-primary-foreground/10 hover:bg-primary-foreground/20 text-primary-foreground/80 transition-colors"
+                                    >
+                                      <X className="h-3 w-3" /> Cancel
+                                    </button>
+                                    <button
+                                      onClick={() => void saveEdit(m.id)}
+                                      disabled={!editBody.trim()}
+                                      className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-primary-foreground/20 hover:bg-primary-foreground/30 text-primary-foreground font-semibold disabled:opacity-40 transition-colors"
+                                    >
+                                      <Check className="h-3 w-3" /> Save
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="leading-relaxed break-words">{renderMessageBody(m.body, mine)}</div>
+                                  {!mine && m.edited_at && (
+                                    <div className="text-[10px] italic opacity-60 mt-0.5">edited</div>
+                                  )}
+                                </>
+                              )}
+                              <AttachmentList attachments={(m.attachments ?? []) as ChatAttachment[]} allChatImages={allChatImages} />
+                              <MessageReactions messageId={m.id} />
+
+                              {/* Thread reply indicator */}
+                              {(m.reply_count ?? 0) > 0 && (
+                                <button
+                                  onClick={() => setThreadParentId(m.id)}
+                                  className={`mt-1.5 inline-flex items-center gap-1.5 text-[11px] font-medium rounded-full px-2 py-0.5 transition-colors ${
+                                    mine
+                                      ? "text-primary-foreground/80 bg-primary-foreground/10 hover:bg-primary-foreground/20"
+                                      : "text-primary hover:text-primary/80 bg-primary/8 hover:bg-primary/15 border border-primary/20"
+                                  }`}
+                                >
+                                  <MessageSquare className="h-3 w-3" />
+                                  {m.reply_count} {m.reply_count === 1 ? "reply" : "replies"}
+                                </button>
+                              )}
+
+                              {m.is_pinned && (
+                                <div className={`absolute -bottom-1.5 ${mine ? "-left-1.5" : "-right-1.5"} bg-background border rounded-full p-0.5 shadow-sm`}>
+                                  <Pin className="h-3 w-3 text-primary fill-primary" />
+                                </div>
+                              )}
+                            </div>
+                          </ContextMenuTrigger>
+                          <ContextMenuContent className="w-52">
+                            {mine && !isEditing && (
+                              <>
+                                <ContextMenuItem
+                                  className="gap-2 cursor-pointer"
+                                  onSelect={() => startEdit(m)}
+                                >
+                                  <PencilLine className="h-4 w-4" />
+                                  Edit message
+                                </ContextMenuItem>
+                                <ContextMenuItem
+                                  className="gap-2 cursor-pointer text-destructive focus:text-destructive"
+                                  onSelect={() => void deleteMessage(m.id)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  Delete message
+                                </ContextMenuItem>
+                              </>
+                            )}
                             <ContextMenuItem
                               className="gap-2 cursor-pointer"
-                              onSelect={() => startEdit(m)}
+                              onSelect={() => {
+                                const senderName = senders[m.sender_id] ?? "User";
+                                setReplyTo({ id: m.id, body: m.body, senderName });
+                              }}
                             >
-                              <PencilLine className="h-4 w-4" />
-                              Edit message
+                              <MessageSquare className="h-4 w-4" />
+                              Reply to message
                             </ContextMenuItem>
                             <ContextMenuItem
-                              className="gap-2 cursor-pointer text-destructive focus:text-destructive"
-                              onSelect={() => void deleteMessage(m.id)}
+                              className="gap-2 cursor-pointer"
+                              onSelect={() => setThreadParentId(m.id)}
                             >
-                              <Trash2 className="h-4 w-4" />
-                              Delete message
+                              <MessageSquare className="h-4 w-4" />
+                              Reply in thread
                             </ContextMenuItem>
-                          </>
-                        )}
-                        <ContextMenuItem
-                          className="gap-2 cursor-pointer"
-                          onSelect={() => {
-                            const senderName = senders[m.sender_id] ?? "User";
-                            setReplyTo({ id: m.id, body: m.body, senderName });
-                          }}
-                        >
-                          <MessageSquare className="h-4 w-4" />
-                          Reply to message
-                        </ContextMenuItem>
-                        <ContextMenuItem
-                          className="gap-2 cursor-pointer"
-                          onSelect={() => setThreadParentId(m.id)}
-                        >
-                          <MessageSquare className="h-4 w-4" />
-                          Reply in thread
-                        </ContextMenuItem>
-                        {(mine || canModerate) && (
-                          <ContextMenuItem
-                            className="gap-2 cursor-pointer"
-                            onSelect={() => togglePin(m)}
-                          >
-                            <Pin className="h-4 w-4" />
-                            {m.is_pinned ? "Unpin" : "Pin message"}
-                          </ContextMenuItem>
-                        )}
-                        <ContextMenuSeparator />
-                        <ContextMenuSub>
-                          <ContextMenuSubTrigger className="gap-2 cursor-pointer">
-                            <Smile className="h-4 w-4" />
-                            React
-                          </ContextMenuSubTrigger>
-                          <ContextMenuSubContent className="p-1">
-                            <div className="flex flex-wrap gap-0.5 max-w-[160px]">
-                              {["👍","❤️","😂","🎉","🙏","👀","🔥","✅"].map((emoji) => (
-                                <ContextMenuItem
-                                  key={emoji}
-                                  className="text-lg p-1.5 rounded cursor-pointer hover:bg-muted justify-center"
-                                  onSelect={() => {
-                                    void (async () => {
-                                      const { data: existing } = await (supabase as any)
-                                        .from("message_reactions")
-                                        .select("id")
-                                        .eq("message_id", m.id)
-                                        .eq("employee_id", employee?.id)
-                                        .eq("emoji", emoji)
-                                        .maybeSingle();
-                                      if (existing) {
-                                        await (supabase as any).from("message_reactions").delete().eq("id", existing.id);
-                                      } else {
-                                        await (supabase as any).from("message_reactions").insert({ message_id: m.id, employee_id: employee?.id, emoji });
-                                      }
-                                      void qc.invalidateQueries({ queryKey: ["reactions", m.id] });
-                                    })();
-                                  }}
-                                >
-                                  {emoji}
-                                </ContextMenuItem>
-                              ))}
-                            </div>
-                          </ContextMenuSubContent>
-                        </ContextMenuSub>
-                      </ContextMenuContent>
-                    </ContextMenu>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+                            {(mine || canModerate) && (
+                              <ContextMenuItem
+                                className="gap-2 cursor-pointer"
+                                onSelect={() => togglePin(m)}
+                              >
+                                <Pin className="h-4 w-4" />
+                                {m.is_pinned ? "Unpin" : "Pin message"}
+                              </ContextMenuItem>
+                            )}
+                            <ContextMenuSeparator />
+                            <ContextMenuSub>
+                              <ContextMenuSubTrigger className="gap-2 cursor-pointer">
+                                <Smile className="h-4 w-4" />
+                                React
+                              </ContextMenuSubTrigger>
+                              <ContextMenuSubContent className="p-1">
+                                <div className="flex flex-wrap gap-0.5 max-w-[160px]">
+                                  {["👍","❤️","😂","🎉","🙏","👀","🔥","✅"].map((emoji) => (
+                                    <ContextMenuItem
+                                      key={emoji}
+                                      className="text-lg p-1.5 rounded cursor-pointer hover:bg-muted justify-center"
+                                      onSelect={() => {
+                                        void (async () => {
+                                          const { data: existing } = await (supabase as any)
+                                            .from("message_reactions")
+                                            .select("id")
+                                            .eq("message_id", m.id)
+                                            .eq("employee_id", employee?.id)
+                                            .eq("emoji", emoji)
+                                            .maybeSingle();
+                                          if (existing) {
+                                            await (supabase as any).from("message_reactions").delete().eq("id", existing.id);
+                                          } else {
+                                            await (supabase as any).from("message_reactions").insert({ message_id: m.id, employee_id: employee?.id, emoji });
+                                          }
+                                          void qc.invalidateQueries({ queryKey: ["reactions", m.id] });
+                                        })();
+                                      }}
+                                    >
+                                      {emoji}
+                                    </ContextMenuItem>
+                                  ))}
+                                </div>
+                              </ContextMenuSubContent>
+                            </ContextMenuSub>
+                          </ContextMenuContent>
+                        </ContextMenu>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
           {!isThreadLoading && messages.length === 0 && <p className="text-center text-sm text-muted-foreground py-10">No messages yet.</p>}
         </div>
         <div className="border-t p-3 space-y-2 bg-card shadow-inner" onPaste={handlePaste}>

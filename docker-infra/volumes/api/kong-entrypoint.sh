@@ -12,6 +12,14 @@
 #   3. If apikey matches publishable key -> set anon asymmetric JWT internal "API key"
 #   4. Fallback: pass apikey as-is (legacy HS256 JWT)
 
+# Avoid duplicate key uniqueness violation in Kong if publishable/secret keys match legacy anon/service keys
+if [ "$SUPABASE_PUBLISHABLE_KEY" = "$SUPABASE_ANON_KEY" ]; then
+    export SUPABASE_PUBLISHABLE_KEY=""
+fi
+if [ "$SUPABASE_SECRET_KEY" = "$SUPABASE_SERVICE_KEY" ]; then
+    export SUPABASE_SECRET_KEY=""
+fi
+
 if [ -n "$SUPABASE_SECRET_KEY" ] && [ -n "$SUPABASE_PUBLISHABLE_KEY" ]; then
     # Opaque keys configured -> full translation expressions
     export LUA_AUTH_EXPR="\$((headers.authorization ~= nil and headers.authorization:sub(1, 10) ~= 'Bearer sb_' and headers.authorization) or (headers.apikey == '$SUPABASE_SECRET_KEY' and 'Bearer $SERVICE_ROLE_KEY_ASYMMETRIC') or (headers.apikey == '$SUPABASE_PUBLISHABLE_KEY' and 'Bearer $ANON_KEY_ASYMMETRIC') or headers.apikey)"

@@ -1,5 +1,5 @@
-import { formatDateTime } from "@/lib/utils";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { formatDateTime, formatChatDividerDate } from "@/lib/utils";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -93,6 +93,21 @@ export function ThreadPanel({ parentId, channelId, onClose }: { parentId: string
 
   // Combined view: older pages prepended before the live window
   const replies = [...olderReplies, ...latestReplies];
+
+  // Group replies by day for sticky headers
+  const replyGroups = useMemo(() => {
+    const groups: { dateStr: string; replies: ReplyMsg[] }[] = [];
+    replies.forEach((r) => {
+      const dateStr = new Date(r.created_at).toDateString();
+      const lastGroup = groups[groups.length - 1];
+      if (lastGroup && lastGroup.dateStr === dateStr) {
+        lastGroup.replies.push(r);
+      } else {
+        groups.push({ dateStr, replies: [r] });
+      }
+    });
+    return groups;
+  }, [replies]);
 
   // Load older replies using a created_at cursor
   const loadOlderReplies = useCallback(async () => {
@@ -242,31 +257,16 @@ export function ThreadPanel({ parentId, channelId, onClose }: { parentId: string
             </div>
           )}
           {parent && (
-            <MessageRow
-              m={parent}
-              mine={parent.sender_id === employee?.id}
-              isEditing={editingId === parent.id}
-              editBody={editBody}
-              setEditBody={setEditBody}
-              startEdit={startEdit}
-              cancelEdit={cancelEdit}
-              saveEdit={saveEdit}
-              deleteMessage={deleteMessage}
-              onReply={handleReply}
-              onQuoteReply={(id, b, sender) => setReplyTo({ id, body: b, senderName: sender })}
-              employeeId={employee?.id ?? ""}
-              qc={qc}
-              allChatImages={allChatImages}
-            />
-          )}
-          {replies.length > 0 && <div className="border-b text-[10px] text-muted-foreground uppercase tracking-wider py-1 font-semibold">Replies</div>}
-          <div className="space-y-3">
-            {replies.map((m) => (
+            <div className="space-y-3 relative">
+              <div className="sticky top-0 z-10 flex items-center justify-center py-1 w-full">
+                <span className="mx-3 text-[10px] font-semibold text-muted-foreground bg-background/90 backdrop-blur-sm px-2.5 py-1 rounded-full shadow-sm border border-border/50 select-none">
+                  {formatChatDividerDate(parent.created_at)}
+                </span>
+              </div>
               <MessageRow
-                key={m.id}
-                m={m}
-                mine={m.sender_id === employee?.id}
-                isEditing={editingId === m.id}
+                m={parent}
+                mine={parent.sender_id === employee?.id}
+                isEditing={editingId === parent.id}
                 editBody={editBody}
                 setEditBody={setEditBody}
                 startEdit={startEdit}
@@ -279,7 +279,43 @@ export function ThreadPanel({ parentId, channelId, onClose }: { parentId: string
                 qc={qc}
                 allChatImages={allChatImages}
               />
-            ))}
+            </div>
+          )}
+          {replies.length > 0 && <div className="border-b text-[10px] text-muted-foreground uppercase tracking-wider py-1 font-semibold">Replies</div>}
+          <div className="space-y-3">
+            {replyGroups.map((group) => {
+              const showDivider = !parent || new Date(parent.created_at).toDateString() !== group.dateStr;
+              return (
+                <div key={group.dateStr} className="space-y-3 relative">
+                  {showDivider && (
+                    <div className="sticky top-0 z-10 flex items-center justify-center py-1 w-full">
+                      <span className="mx-3 text-[10px] font-semibold text-muted-foreground bg-background/90 backdrop-blur-sm px-2.5 py-1 rounded-full shadow-sm border border-border/50 select-none">
+                        {formatChatDividerDate(group.dateStr)}
+                      </span>
+                    </div>
+                  )}
+                  {group.replies.map((m) => (
+                    <MessageRow
+                      key={m.id}
+                      m={m}
+                      mine={m.sender_id === employee?.id}
+                      isEditing={editingId === m.id}
+                      editBody={editBody}
+                      setEditBody={setEditBody}
+                      startEdit={startEdit}
+                      cancelEdit={cancelEdit}
+                      saveEdit={saveEdit}
+                      deleteMessage={deleteMessage}
+                      onReply={handleReply}
+                      onQuoteReply={(id, b, sender) => setReplyTo({ id, body: b, senderName: sender })}
+                      employeeId={employee?.id ?? ""}
+                      qc={qc}
+                      allChatImages={allChatImages}
+                    />
+                  ))}
+                </div>
+              );
+            })}
           </div>
         </div>
         <div className="border-t p-2 space-y-2">
