@@ -301,6 +301,7 @@ function ChatThread({ conversationId, onBack, initialMessageId }: { conversation
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastScrollConvId = useRef<string | null>(null);
   const prevScrollHeight = useRef<number>(0);
+  const lastMessageIdRef = useRef<string | undefined>(undefined);
   const [olderMessages, setOlderMessages] = useState<Message[]>([]);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
@@ -502,6 +503,8 @@ function ChatThread({ conversationId, onBack, initialMessageId }: { conversation
     return () => { supabase.removeChannel(ch); };
   }, [conversationId, qc]);
 
+  const lastMessageId = messages[messages.length - 1]?.id;
+
   useEffect(() => {
     if (!scrollRef.current) return;
     if (lastScrollConvId.current !== conversationId) {
@@ -509,12 +512,16 @@ function ChatThread({ conversationId, onBack, initialMessageId }: { conversation
       scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "auto" });
       if (messages.length > 0) {
         lastScrollConvId.current = conversationId;
+        lastMessageIdRef.current = lastMessageId;
       }
     } else {
       // Smooth scroll for subsequent message updates (e.g. new message received/sent)
-      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+      if (lastMessageId && lastMessageId !== lastMessageIdRef.current) {
+        scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+        lastMessageIdRef.current = lastMessageId;
+      }
     }
-  }, [messages.length, conversationId]);
+  }, [messages.length, conversationId, lastMessageId]);
 
   // Highlight/scroll to targeted message
   useEffect(() => {

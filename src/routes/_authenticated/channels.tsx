@@ -345,6 +345,7 @@ function ChannelThread({ channelId, onBack, initialMessageId }: { channelId: str
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastScrollChannelId = useRef<string | null>(null);
   const prevScrollHeight = useRef<number>(0);
+  const lastMessageIdRef = useRef<string | undefined>(undefined);
   const [olderMessages, setOlderMessages] = useState<Msg[]>([]);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
@@ -546,6 +547,8 @@ function ChannelThread({ channelId, onBack, initialMessageId }: { channelId: str
     };
   }, [channelId, employee?.id, messages.length, qc, membership]);
 
+  const lastMessageId = messages[messages.length - 1]?.id;
+
   useEffect(() => {
     if (!scrollRef.current) return;
     if (lastScrollChannelId.current !== channelId) {
@@ -553,12 +556,16 @@ function ChannelThread({ channelId, onBack, initialMessageId }: { channelId: str
       scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "auto" });
       if (messages.length > 0) {
         lastScrollChannelId.current = channelId;
+        lastMessageIdRef.current = lastMessageId;
       }
     } else {
       // Smooth scroll for subsequent message updates
-      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+      if (lastMessageId && lastMessageId !== lastMessageIdRef.current) {
+        scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+        lastMessageIdRef.current = lastMessageId;
+      }
     }
-  }, [messages.length, channelId]);
+  }, [messages.length, channelId, lastMessageId]);
 
   // Highlight/scroll to targeted message
   useEffect(() => {

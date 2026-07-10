@@ -41,6 +41,8 @@ export function ThreadPanel({ parentId, channelId, onClose }: { parentId: string
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<MentionInputHandle>(null);
   const prevScrollHeight = useRef<number>(0);
+  const lastReplyIdRef = useRef<string | undefined>(undefined);
+  const lastParentIdRef = useRef<string | null>(null);
   const [olderReplies, setOlderReplies] = useState<ReplyMsg[]>([]);
   const [hasMoreReplies, setHasMoreReplies] = useState(true);
   const [loadingOlderReplies, setLoadingOlderReplies] = useState(false);
@@ -51,6 +53,7 @@ export function ThreadPanel({ parentId, channelId, onClose }: { parentId: string
     setOlderReplies([]);
     setHasMoreReplies(true);
     setReplyTo(null);
+    lastParentIdRef.current = null;
   }, [parentId]);
 
   // Handle escape key to cancel reply quote
@@ -153,7 +156,23 @@ export function ThreadPanel({ parentId, channelId, onClose }: { parentId: string
     return () => { supabase.removeChannel(ch); };
   }, [parentId, channelId, qc]);
 
-  useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }); }, [replies.length]);
+  const lastReplyId = replies[replies.length - 1]?.id;
+
+  useEffect(() => {
+    if (!scrollRef.current) return;
+    if (lastParentIdRef.current !== parentId) {
+      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "auto" });
+      if (replies.length > 0) {
+        lastParentIdRef.current = parentId;
+        lastReplyIdRef.current = lastReplyId;
+      }
+    } else {
+      if (lastReplyId && lastReplyId !== lastReplyIdRef.current) {
+        scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+        lastReplyIdRef.current = lastReplyId;
+      }
+    }
+  }, [replies.length, parentId, lastReplyId]);
 
   const send = async () => {
     const text = body.trim();
