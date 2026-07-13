@@ -210,7 +210,7 @@ export function ChatPage({ initialConversationId, initialMessageId }: { initialC
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-[320px_1fr] gap-4 h-full">
-      <Card className={cn("flex flex-col", activeId ? "hidden md:flex" : "flex")}>
+      <Card className={cn("flex flex-col overflow-hidden", activeId ? "hidden md:flex" : "flex")}>
         <div className="p-3 border-b space-y-2">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold">Messages</h2>

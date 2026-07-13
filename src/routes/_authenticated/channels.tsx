@@ -294,7 +294,7 @@ export function ChannelsPage({ initialChannelId, initialMessageId }: { initialCh
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-[380px_1fr] gap-4 h-full">
-      <Card className={cn("flex flex-col", activeId ? "hidden md:flex" : "flex")}>
+      <Card className={cn("flex flex-col overflow-hidden", activeId ? "hidden md:flex" : "flex")}>
         <div className="p-3 border-b flex items-center justify-between">
           <h2 className="font-semibold">Channels</h2>
           <div className="flex items-center gap-1">
