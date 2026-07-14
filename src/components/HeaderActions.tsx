@@ -28,7 +28,7 @@ export function HeaderActions() {
   const { data: items = [] } = useQuery({
     queryKey: ["notifications", employee?.id],
     enabled: !!employee?.id,
-    refetchInterval: 30_000,
+    refetchInterval: 5 * 60_000,   // Realtime subscription below handles live updates
     queryFn: async () => {
       const { data } = await supabase
         .from("notifications")

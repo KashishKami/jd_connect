@@ -17,7 +17,7 @@ export function usePresenceMap() {
 
   const { data = {} as PresenceMap } = useQuery<PresenceMap>({
     queryKey: ["presence-map"],
-    refetchInterval: 30_000,
+    refetchInterval: 2 * 60_000,   // Realtime subscription below handles live updates
     queryFn: async () => {
       const [pres, brks] = await Promise.all([
         supabase.from("employee_presence").select("employee_id, status, last_seen_at"),
