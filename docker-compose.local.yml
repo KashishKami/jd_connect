@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-http://localhost:19000}
+        VITE_SUPABASE_PUBLISHABLE_KEY: ${VITE_SUPABASE_PUBLISHABLE_KEY:-${SUPABASE_PUBLISHABLE_KEY}}
+    container_name: jdc-local-app
+    restart: unless-stopped
+    ports:
+      - "19003:19003"
+    environment:
+      NODE_ENV: production
+      PORT: 19003
+      SUPABASE_URL: http://host.docker.internal:19000
+      SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

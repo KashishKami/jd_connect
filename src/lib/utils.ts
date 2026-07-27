@@ -64,3 +64,50 @@ export function formatChatDividerDate(dateInput: string | Date): string {
   }
 }
 
+/** Get current date string (YYYY-MM-DD) in US Eastern Time (America/New_York) */
+export function getUSEasternDateStr(date: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+/**
+ * Returns startOfDay and endOfDay UTC ISO strings for a given YYYY-MM-DD date in America/New_York timezone.
+ */
+export function getUSEasternDayRange(dateStr: string): { startOfDay: string; endOfDay: string } {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const testUtc = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+  const nyParts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+    hour12: false,
+  }).formatToParts(testUtc);
+
+  const p: Record<string, number> = {};
+  for (const part of nyParts) {
+    if (part.type !== "literal") {
+      p[part.type] = parseInt(part.value, 10);
+    }
+  }
+
+  const nyAsUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour === 24 ? 0 : p.hour, p.minute, p.second);
+  const offsetMs = nyAsUtc - testUtc.getTime();
+
+  const startMs = Date.UTC(y, m - 1, d, 0, 0, 0) - offsetMs;
+  const endMs = Date.UTC(y, m - 1, d, 23, 59, 59, 999) - offsetMs;
+
+  return {
+    startOfDay: new Date(startMs).toISOString(),
+    endOfDay: new Date(endMs).toISOString(),
+  };
+}
+
+

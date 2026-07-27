@@ -177,7 +177,7 @@ export function AuthPage() {
         email,
         password: parsed.data.password,
         options: {
-          emailRedirectTo: window.location.origin,
+          emailRedirectTo: `${window.location.origin}/pending-approval`,
           data: { full_name: parsed.data.full_name, alias_name: parsed.data.alias_name },
         },
       });
@@ -190,11 +190,12 @@ export function AuthPage() {
         toast.info(`Heads up: ${ALLOWED_DOMAIN} accounts are preferred. Yours will still need Super Admin approval.`);
       }
       setPendingEmail(email);
-      if (data.session) {
-        navigate({ to: "/pending-approval" });
-      } else {
-        setStep("check-email");
-      }
+      // Always show the "check your email" screen first — even if Supabase returns
+      // a session immediately. The status flip (unverified → pending) must only
+      // happen AFTER the user physically clicks the verification link, not before.
+      // Skipping this step was causing admins to see users in the approval queue
+      // before the email had even arrived in the user's inbox.
+      setStep("check-email");
     } finally {
       setLoading(false);
     }

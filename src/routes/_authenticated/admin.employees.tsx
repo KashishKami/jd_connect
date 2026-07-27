@@ -313,22 +313,24 @@ function Page() {
                   <TableCell className="capitalize">{e.employment_status}</TableCell>
                   <TableCell>
                     {(() => {
-                      const a = (e as EmpRow).approval_status ?? "approved";
+                      const a = (e as EmpRow).approval_status ?? "unverified";
                       const cls =
                         a === "approved"
                           ? "bg-emerald-500/10 text-emerald-700"
                           : a === "pending"
                             ? "bg-amber-500/10 text-amber-700"
-                            : "bg-destructive/10 text-destructive";
+                            : a === "unverified"
+                              ? "bg-slate-500/10 text-slate-500"
+                              : "bg-destructive/10 text-destructive";
                       return (
                         <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium capitalize ${cls}`}>
-                          {a}
+                          {a === "unverified" ? "email unverified" : a}
                         </span>
                       );
                     })()}
                   </TableCell>
                   <TableCell className="flex gap-1">
-                    {canApprove && (e as EmpRow).approval_status !== "approved" && (
+                    {canApprove && (e as EmpRow).approval_status === "pending" && (
                       <Button
                         size="sm"
                         variant="default"

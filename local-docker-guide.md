@@ -64,7 +64,31 @@ These are values the **server-side Node.js process** reads via `process.env` whe
 
 ## Step-by-Step: Build and Run Locally
 
-### Step 1 — Build the Docker Image
+### Option A: Using Docker Compose (Recommended)
+
+`docker-compose.local.yml` automatically reads your variables directly from your root `.env` file (`SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `VITE_SUPABASE_URL`).
+
+#### 1. Start the Container:
+```powershell
+docker compose -f docker-compose.local.yml up -d --build
+```
+
+#### 2. Check Container Logs:
+```powershell
+docker compose -f docker-compose.local.yml logs -f
+```
+
+#### 3. Stop the Container:
+```powershell
+docker compose -f docker-compose.local.yml down
+```
+
+
+---
+
+### Option B: Manual `docker build` & `docker run`
+
+#### Step 1 — Build the Docker Image
 
 Replace `YOUR_ANON_KEY` with the `ANON_KEY` value from your `docker-infra/.env`.
 
@@ -74,27 +98,13 @@ docker build -t jd-connect-local . `
   --build-arg VITE_SUPABASE_PUBLISHABLE_KEY=YOUR_ANON_KEY
 ```
 
-**Example with placeholder values:**
-```powershell
-docker build -t jd-connect-local . `
-  --build-arg VITE_SUPABASE_URL=http://localhost:19000 `
-  --build-arg VITE_SUPABASE_PUBLISHABLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.YOUR_ANON_KEY_HERE
-```
-
 > This runs the full build inside a `node:22-alpine` container: installs dependencies, compiles the app, and produces an image ready to run.
-
-> ⚠️ **The build takes 3–5 minutes the first time** (downloads the Node.js base image, installs all `node_modules`, compiles the full app). Subsequent builds are much faster due to Docker layer caching.
 
 ---
 
-### Step 2 — Run the Container
+#### Step 2 — Run the Container
 
 Replace `YOUR_SERVICE_ROLE_KEY` and `YOUR_ANON_KEY` with the matching values from `docker-infra/.env`.
-
-> ⚠️ **Important:** `SUPABASE_PUBLISHABLE_KEY` (no `VITE_` prefix) **must** be passed at runtime.
-> The `VITE_` prefixed key is baked into the client bundle at build time, but the server-side
-> middleware reads `process.env.SUPABASE_PUBLISHABLE_KEY` at runtime. Omitting it causes
-> "Unauthorized" errors on every server function (password reset, delete, AI, etc.).
 
 ```powershell
 docker run -d --name jdc-test -p 19003:19003 `
@@ -106,28 +116,12 @@ docker run -d --name jdc-test -p 19003:19003 `
   jd-connect-local
 ```
 
-
-**What each flag means:**
-
-| Flag | Meaning |
-|---|---|
-| `-d` | Run in detached (background) mode — terminal stays free |
-| `--name jdc-test` | Give the container a friendly name so you can reference it easily |
-| `-p 19003:19003` | Map your Windows port 19003 → container port 19003 |
-| `-e NODE_ENV=production` | Enable production mode in Node.js |
-| `-e PORT=19003` | Tell the server which port to listen on inside the container |
-| `-e SUPABASE_URL=...` | Server-side Supabase URL (uses `host.docker.internal` to reach your Windows Supabase) |
-| `-e SUPABASE_PUBLISHABLE_KEY=...` | Anon key — required by server-side auth middleware at runtime |
-| `-e SUPABASE_SERVICE_ROLE_KEY=...` | Privileged server-side Supabase key |
-| `jd-connect-local` | The name of the image to run (built in Step 1) |
-
----
-
-### Step 3 — Check Logs
+#### Step 3 — Check Logs
 
 ```powershell
-docker logs jdc-test
+docker logs -f jdc-test
 ```
+
 
 You should see:
 ```

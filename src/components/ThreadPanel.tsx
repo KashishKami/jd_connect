@@ -158,6 +158,7 @@ export function ThreadPanel({ parentId, channelId, onClose }: { parentId: string
 
   const lastReplyId = replies[replies.length - 1]?.id;
 
+
   useEffect(() => {
     if (!scrollRef.current) return;
     if (lastParentIdRef.current !== parentId) {

@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { formatDateTime } from "@/lib/utils";
+import { formatDateTime, getUSEasternDateStr, getUSEasternDayRange } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/breaks/team")({
   head: () => ({ meta: [{ title: "Team Breaks — JD Connect" }] }),
@@ -45,7 +45,7 @@ function TeamBreaks() {
   const { employee, isAdmin, hasRole } = useAuth();
   const { can } = usePermissions();
   const qc = useQueryClient();
-  const [filterDate, setFilterDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [filterDate, setFilterDate] = useState(() => getUSEasternDateStr());
   const [expandedEmps, setExpandedEmps] = useState<Record<string, boolean>>({});
   const toggleEmpExpand = (empId: string) => {
     setExpandedEmps(prev => ({ ...prev, [empId]: !prev[empId] }));
@@ -90,8 +90,7 @@ function TeamBreaks() {
     enabled: teamIds.length > 0,
     queryKey: ["team-break-history", teamIds, filterDate],
     queryFn: async () => {
-      const startOfDay = new Date(`${filterDate}T00:00:00`).toISOString();
-      const endOfDay = new Date(`${filterDate}T23:59:59.999`).toISOString();
+      const { startOfDay, endOfDay } = getUSEasternDayRange(filterDate);
       const { data, error } = await supabase
         .from("break_records")
         .select("*, employee:employees(id, full_name, alias_name, employee_code), break_type:break_types(name)")
