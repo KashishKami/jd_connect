@@ -16,6 +16,7 @@ import { DeleteRowButton } from "@/components/DeleteRowButton";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/hooks/useAuth";
 import { adminSetEmployeePassword } from "@/lib/admin-password.functions";
+import { adminCreateEmployee } from "@/lib/admin-employee.functions";
 
 export const Route = createFileRoute("/_authenticated/admin/employees")({ component: Page });
 
@@ -111,6 +112,8 @@ function Page() {
     },
   });
 
+  const createEmpFn = useServerFn(adminCreateEmployee);
+
   const save = useMutation({
     mutationFn: async (row: Partial<EmpRow>) => {
       if (editing) {
@@ -120,14 +123,27 @@ function Page() {
           .eq("id", editing.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase
-          .from("employees")
-          .insert({ ...row, full_name: row.full_name!, email: row.email! } as never);
-        if (error) throw error;
+        await createEmpFn({
+          data: {
+            full_name: row.full_name!,
+            email: row.email!,
+            employee_code: row.employee_code,
+            alias_name: row.alias_name,
+            mobile: row.mobile,
+            designation: row.designation,
+            joining_date: row.joining_date,
+            department_id: row.department_id,
+            centre_id: row.centre_id,
+            role_id: row.role_id,
+            shift_id: row.shift_id,
+            team_leader_id: row.team_leader_id,
+            manager_id: row.manager_id,
+          },
+        });
       }
     },
     onSuccess: () => {
-      toast.success("Saved");
+      toast.success(editing ? "Saved" : "Employee created & verification email sent!");
       setOpen(false);
       setEditing(null);
       qc.invalidateQueries({ queryKey: ["admin-employees"] });

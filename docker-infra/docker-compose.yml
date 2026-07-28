@@ -190,7 +190,7 @@ services:
       # GOTRUE_EXTERNAL_SKIP_NONCE_CHECK: "true"
 
       # GOTRUE_MAILER_SECURE_EMAIL_CHANGE_ENABLED: "true"
-      # GOTRUE_SMTP_MAX_FREQUENCY: 1s
+      GOTRUE_SMTP_MAX_FREQUENCY: 1s
       GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_ADMIN_EMAIL}
       GOTRUE_SMTP_HOST: ${SMTP_HOST}
       GOTRUE_SMTP_PORT: ${SMTP_PORT}
@@ -554,6 +554,7 @@ services:
   # Update the DATABASE_URL if you are using an external Postgres database
   supavisor:
     container_name: supabase-pooler
+    hostname: pooler
     image: supabase/supavisor:2.9.5
     restart: unless-stopped
     ports:

@@ -31,10 +31,27 @@ export const deleteAdminEntity = createServerFn({ method: "POST" })
     if (data.entity === "employee") {
       const { data: emp } = await supabaseAdmin
         .from("employees")
-        .select("id, auth_user_id, employment_status")
+        .select("id, auth_user_id, email, employment_status")
         .eq("id", data.id)
         .maybeSingle();
       if (!emp) throw new Error("Employee not found");
+
+      const purgeAuthUser = async () => {
+        if (emp.auth_user_id) {
+          try { await supabaseAdmin.auth.admin.deleteUser(emp.auth_user_id); } catch { /* ignore */ }
+        }
+        if (emp.email) {
+          try {
+            const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 });
+            const matching = list?.users?.find((u) => u.email?.toLowerCase() === emp.email.toLowerCase());
+            if (matching) {
+              await supabaseAdmin.auth.admin.deleteUser(matching.id);
+            }
+          } catch {
+            /* ignore */
+          }
+        }
+      };
 
       // First click on an active employee → soft delete (mark terminated, revoke auth)
       if (emp.employment_status !== "terminated") {
@@ -43,20 +60,13 @@ export const deleteAdminEntity = createServerFn({ method: "POST" })
           .update({ employment_status: "terminated" })
           .eq("id", data.id);
         if (error) throw new Error(error.message);
-        if (emp.auth_user_id) {
-          try {
-            await supabaseAdmin.auth.admin.deleteUser(emp.auth_user_id);
-          } catch {
-            /* user may not exist; continue */
-          }
-        }
+        await purgeAuthUser();
         return { ok: true, soft: true } as const;
       }
 
       // Second click on an already-terminated employee → permanent delete
-      if (emp.auth_user_id) {
-        try { await supabaseAdmin.auth.admin.deleteUser(emp.auth_user_id); } catch { /* ignore */ }
-      }
+      await purgeAuthUser();
+
       // Null out NO ACTION references so the row delete is not blocked
       await supabaseAdmin.from("employees").update({ team_leader_id: null }).eq("team_leader_id", data.id);
       await supabaseAdmin.from("employees").update({ manager_id: null }).eq("manager_id", data.id);

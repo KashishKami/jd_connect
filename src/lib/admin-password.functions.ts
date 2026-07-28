@@ -76,8 +76,17 @@ export const adminSetEmployeePassword = createServerFn({ method: "POST" })
         .update({ auth_user_id: authId })
         .eq("id", data.employee_id);
       if (linkErr) {
-        console.error('[Password Reset] Linking failed:', linkErr);
-        throw new Error(linkErr.message);
+        console.warn('[Password Reset] Linking update warning (may already be linked by DB trigger):', linkErr.message);
+        // Verify if the employee is already linked to authId
+        const { data: verifyEmp } = await supabaseAdmin
+          .from("employees")
+          .select("auth_user_id")
+          .eq("id", data.employee_id)
+          .maybeSingle();
+        if (verifyEmp?.auth_user_id !== authId) {
+          // If not linked and linkErr is something else, throw error
+          throw new Error(linkErr.message);
+        }
       }
     }
 
